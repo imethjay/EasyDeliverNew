@@ -15,7 +15,7 @@ import * as Location from "expo-location";
 import Animated, { LightSpeedInLeft } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "../firebase/init";
 import { formatCurrency } from "../utils/helpers";
 
@@ -48,6 +48,14 @@ const FindRide = () => {
     const [duration, setDuration] = useState(null);
     const [loading, setLoading] = useState(true);
     const [courierDetails, setCourierDetails] = useState(null);
+    const [vehicleAvailability, setVehicleAvailability] = useState({
+        Bike: 0,
+        Car: 0,
+        Truck: 0,
+        Tuk: 0,
+        "Mini-Lorry": 0,
+        Carrier: 0
+    });
     const mapRef = useRef(null);
     const navigation = useNavigation();
     const route = useRoute();
@@ -71,6 +79,47 @@ const FindRide = () => {
         };
 
         fetchCourierDetails();
+    }, [selectedCourier]);
+
+    // Fetch available drivers by vehicle type for the selected courier
+    useEffect(() => {
+        const fetchDriverAvailability = async () => {
+            if (selectedCourier) {
+                try {
+                    // Query drivers collection to get all approved drivers for this courier
+                    const driversQuery = query(
+                        collection(db, "drivers"),
+                        where("courierId", "==", selectedCourier),
+                        where("status", "==", "approved")
+                    );
+                    
+                    const querySnapshot = await getDocs(driversQuery);
+                    
+                    // Count drivers by vehicle type
+                    const vehicleCounts = {
+                        Bike: 0,
+                        Car: 0,
+                        Truck: 0,
+                        Tuk: 0,
+                        "Mini-Lorry": 0,
+                        Carrier: 0
+                    };
+                    
+                    querySnapshot.forEach(doc => {
+                        const driver = doc.data();
+                        if (driver.vehicleType && vehicleCounts.hasOwnProperty(driver.vehicleType)) {
+                            vehicleCounts[driver.vehicleType]++;
+                        }
+                    });
+                    
+                    setVehicleAvailability(vehicleCounts);
+                } catch (err) {
+                    console.error("Error fetching driver availability:", err);
+                }
+            }
+        };
+
+        fetchDriverAvailability();
     }, [selectedCourier]);
 
     // Get geocoded locations from addresses
@@ -123,6 +172,9 @@ const FindRide = () => {
         let baseSmall = 1000;
         let baseMedium = 1200;
         let baseLarge = 1500;
+        let baseTuk = 1100;
+        let baseMiniLorry = 1700;
+        let baseCarrier = 1300;
         
         // Adjust based on package weight if available
         if (packageDetails && packageDetails.weight) {
@@ -131,6 +183,9 @@ const FindRide = () => {
                 baseSmall += weight * 50;
                 baseMedium += weight * 40;
                 baseLarge += weight * 30;
+                baseTuk += weight * 45;
+                baseMiniLorry += weight * 25;
+                baseCarrier += weight * 35;
             }
         }
         
@@ -140,12 +195,18 @@ const FindRide = () => {
             baseSmall += distanceKm * 30;
             baseMedium += distanceKm * 25;
             baseLarge += distanceKm * 20;
+            baseTuk += distanceKm * 28;
+            baseMiniLorry += distanceKm * 22;
+            baseCarrier += distanceKm * 27;
         }
         
         return [
-            { id: 1, name: "Standard", price: baseSmall, icon: require("../assets/icon/bike.png") },
-            { id: 2, name: "Premium", price: baseMedium, icon: require("../assets/icon/ez_large.png") },
-            { id: 3, name: "Express", price: baseLarge, icon: require("../assets/icon/ez_xl.png") },
+            { id: 1, name: "Bike", price: baseSmall, icon: require("../assets/icon/bike.png"), vehicleType: "Bike", available: vehicleAvailability.Bike || 0 },
+            { id: 2, name: "Car", price: baseMedium, icon: require("../assets/icon/ez_large.png"), vehicleType: "Car", available: vehicleAvailability.Car || 0 },
+            { id: 3, name: "Lorry", price: baseLarge, icon: require("../assets/icon/ez_xl.png"), vehicleType: "Truck", available: vehicleAvailability.Truck || 0 },
+            { id: 4, name: "Tuk", price: baseTuk, icon: require("../assets/icon/tuk.png"), vehicleType: "Tuk", available: vehicleAvailability.Tuk || 0 },
+            { id: 5, name: "Mini-Lorry", price: baseMiniLorry, icon: require("../assets/icon/mini-truck.png"), vehicleType: "Mini-Lorry", available: vehicleAvailability["Mini-Lorry"] || 0 },
+            { id: 6, name: "Carrier", price: baseCarrier, icon: require("../assets/icon/carrier.png"), vehicleType: "Carrier", available: vehicleAvailability.Carrier || 0 },
         ];
     };
 
@@ -170,6 +231,11 @@ const FindRide = () => {
         
         // Find the selected ride option
         const selectedRideDetails = rideOptions.find(r => r.id === selectedRide);
+        
+        if (selectedRideDetails.available === 0) {
+            Alert.alert("No Vehicles Available", `There are currently no ${selectedRideDetails.vehicleType} vehicles available for this service. Please select another option.`);
+            return;
+        }
         
         // Navigate to the appropriate screen with all details
         navigation.navigate("MyOrder", {
@@ -301,26 +367,35 @@ const FindRide = () => {
                 <Animated.View entering={LightSpeedInLeft} className="bg-white shadow-md rounded-2xl p-4">
                     <Text className="text-black text-lg font-semibold mb-3 text-center">Select Service Level</Text>
                     
-                    {/* Ride Options */}
-                    <View className="flex-row justify-around w-full">
+                    {/* Ride Options - Horizontally Scrollable */}
+                    <ScrollView 
+                        horizontal={true} 
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={{ paddingRight: 20 }}
+                        className="flex-row"
+                    >
                         {rideOptions.map((ride) => (
                             <TouchableOpacity
                                 key={ride.id}
-                                className={`items-center p-3 rounded-xl ${selectedRide === ride.id ? "border-2 border-blue-600 bg-gray-100" : "border border-gray-200 bg-white"}`}
-                                style={{ width: '30%', minHeight: 100 }}
+                                className={`items-center p-3 rounded-xl mr-3 ${selectedRide === ride.id ? "border-2 border-blue-600 bg-gray-100" : "border border-gray-200 bg-white"}`}
+                                style={{ width: 100, minHeight: 120 }}
                                 onPress={() => handleSelectRide(ride.id)}
                                 activeOpacity={0.7}
+                                disabled={ride.available === 0}
                             >
                                 <Image 
                                     source={ride.icon} 
                                     className="w-12 h-12 mb-2"
-                                    style={{ width: 48, height: 48, resizeMode: 'contain' }}
+                                    style={{ width: 48, height: 48, resizeMode: 'contain', opacity: ride.available === 0 ? 0.5 : 1 }}
                                 />
                                 <Text className="text-black text-sm font-semibold">{ride.name}</Text>
-                                <Text className="text-gray-600 text-sm">{formatCurrency(ride.price)}</Text>
+                                <Text className="text-gray-600 text-xs">{formatCurrency(ride.price)}</Text>
+                                <Text className={`text-xs mt-1 ${ride.available > 0 ? 'text-blue-600' : 'text-red-500'}`}>
+                                    ({ride.available}) {ride.available === 1 ? 'Available' : 'Available'}
+                                </Text>
                             </TouchableOpacity>
                         ))}
-                    </View>
+                    </ScrollView>
                 </Animated.View>
 
                 {/* Payment Method */}
@@ -341,8 +416,8 @@ const FindRide = () => {
 
                 {/* Next Button */}
                 <TouchableOpacity
-                    className={`w-full py-4 rounded-xl mt-6 mb-6 ${selectedRide ? "bg-blue-800" : "bg-gray-400"}`}
-                    disabled={!selectedRide}
+                    className={`w-full py-4 rounded-xl mt-6 mb-6 ${selectedRide && rideOptions.find(r => r.id === selectedRide)?.available > 0 ? "bg-blue-800" : "bg-gray-400"}`}
+                    disabled={!selectedRide || rideOptions.find(r => r.id === selectedRide)?.available === 0}
                     onPress={handleConfirm}
                 >
                     <Text className="text-center text-white font-bold text-lg">Confirm</Text>
