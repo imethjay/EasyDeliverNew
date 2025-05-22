@@ -3,9 +3,16 @@ import { View, Text, TouchableOpacity, Image, Alert } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons, FontAwesome } from "@expo/vector-icons";
+import { useRoute } from '@react-navigation/native';
+import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '../firebase/init';
+import LocationService from '../utils/LocationService';
 
 const ProofOfDeliveryScreen = ({ navigation }) => {
     const [image, setImage] = useState(null);
+    const [isCompleting, setIsCompleting] = useState(false);
+    const route = useRoute();
+    const { rideRequest } = route.params || {};
 
     const handleTakePhoto = async () => {
         const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -22,6 +29,53 @@ const ProofOfDeliveryScreen = ({ navigation }) => {
 
         if (!result.canceled) {
             setImage(result.assets[0].uri);
+        }
+    };
+
+    const handleCompleteDelivery = async () => {
+        if (!image) {
+            Alert.alert('Photo Required', 'Please take a photo as proof of delivery before completing.');
+            return;
+        }
+
+        if (!rideRequest) {
+            Alert.alert('Error', 'Delivery information not found.');
+            return;
+        }
+
+        try {
+            setIsCompleting(true);
+
+            // Update the ride request status to completed
+            const requestRef = doc(db, 'rideRequests', rideRequest.id);
+            await updateDoc(requestRef, {
+                status: 'completed',
+                completedAt: serverTimestamp(),
+                proofOfDeliveryPhoto: image,
+                updatedAt: serverTimestamp()
+            });
+
+            // Stop location tracking
+            console.log('Stopping location tracking - delivery completed');
+            await LocationService.stopTracking();
+
+            // Show success message
+            Alert.alert(
+                'Delivery Completed!', 
+                'Thank you for completing the delivery successfully.',
+                [
+                    {
+                        text: 'OK',
+                        onPress: () => navigation.navigate('DeliveryComplete', { rideRequest })
+                    }
+                ]
+            );
+
+        } catch (error) {
+            console.error('Error completing delivery:', error);
+            Alert.alert('Error', 'Failed to complete delivery. Please try again.');
+        } finally {
+            setIsCompleting(false);
         }
     };
     return (
@@ -78,8 +132,14 @@ const ProofOfDeliveryScreen = ({ navigation }) => {
                 </TouchableOpacity>
             </View>
             {/* Complete Button */}
-            <TouchableOpacity className="bg-blue-700 py-4 rounded-[20px] items-center">
-                <Text className="text-white font-semibold">Complete Delivery</Text>
+            <TouchableOpacity 
+                className="bg-blue-700 py-4 rounded-[20px] items-center"
+                onPress={handleCompleteDelivery}
+                disabled={isCompleting}
+            >
+                <Text className="text-white font-semibold">
+                    {isCompleting ? 'Completing...' : 'Complete Delivery'}
+                </Text>
             </TouchableOpacity>
 
         </View>

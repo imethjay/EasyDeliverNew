@@ -5,43 +5,84 @@ import MapViewDirections from "react-native-maps-directions";
 import { FontAwesome, Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { doc, getDoc, updateDoc, onSnapshot } from "firebase/firestore";
-import { db } from "../firebase/init";
+import { ref, onValue, off } from "firebase/database";
+import { db, rtdb } from "../firebase/init";
 
 const RiderConfirmed = () => {
     const navigation = useNavigation();
     const route = useRoute();
-    const { packageDetails, courierDetails, rideDetails, distance, duration, driver } = route.params || {};
+    const { packageDetails, courierDetails, rideDetails, distance, duration, driver, rideRequestId } = route.params || {};
     const [pickup, setPickup] = useState(null);
     const [dropoff, setDropoff] = useState(null);
     const [driverLocation, setDriverLocation] = useState(null);
     const [estimatedArrival, setEstimatedArrival] = useState('15 min');
+    const [isDriverLocationAvailable, setIsDriverLocationAvailable] = useState(false);
     const mapRef = useRef(null);
 
-    // Fetch coordinates for pickup and dropoff locations
+    // Function to get geocoding from address (same as FindRide)
+    const getGeocodingFromAddress = async (address) => {
+        try {
+            const response = await fetch(
+                `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=AIzaSyDk4aXK5khZC808S32KRlGir6k0H2RTqsE`
+            );
+            const data = await response.json();
+            if (data.results && data.results.length > 0) {
+                const location = data.results[0].geometry.location;
+                return {
+                    latitude: location.lat,
+                    longitude: location.lng,
+                };
+            }
+            return null;
+        } catch (error) {
+            console.error("Error in geocoding:", error);
+            return null;
+        }
+    };
+
+    // Fetch actual coordinates for pickup and dropoff locations
     useEffect(() => {
         const getCoordinates = async () => {
             try {
                 if (packageDetails) {
-                    // In a real app, use the actual geocoding from the FindRide component
-                    // For now, we'll simulate with random locations
-                    const baseLocation = { latitude: 6.9271, longitude: 79.8612 }; // Colombo, Sri Lanka
-                    setPickup({
-                        latitude: baseLocation.latitude + (Math.random() - 0.5) * 0.05,
-                        longitude: baseLocation.longitude + (Math.random() - 0.5) * 0.05
+                    console.log('Getting coordinates for:', {
+                        pickup: packageDetails.pickupLocation,
+                        dropoff: packageDetails.dropoffLocation
                     });
-                    setDropoff({
-                        latitude: baseLocation.latitude + (Math.random() - 0.5) * 0.05,
-                        longitude: baseLocation.longitude + (Math.random() - 0.5) * 0.05
-                    });
+
+                    const pickupCoords = await getGeocodingFromAddress(packageDetails.pickupLocation);
+                    const dropoffCoords = await getGeocodingFromAddress(packageDetails.dropoffLocation);
                     
-                    // Simulate driver location (initially closer to pickup)
-                    setDriverLocation({
-                        latitude: baseLocation.latitude + (Math.random() - 0.5) * 0.03,
-                        longitude: baseLocation.longitude + (Math.random() - 0.5) * 0.03
-                    });
+                    if (pickupCoords && dropoffCoords) {
+                        setPickup(pickupCoords);
+                        setDropoff(dropoffCoords);
+                        console.log('Coordinates set:', { pickupCoords, dropoffCoords });
+                    } else {
+                        // Fallback to default locations if geocoding fails
+                        const baseLocation = { latitude: 6.9271, longitude: 79.8612 }; // Colombo, Sri Lanka
+                        setPickup({
+                            latitude: baseLocation.latitude + (Math.random() - 0.5) * 0.05,
+                            longitude: baseLocation.longitude + (Math.random() - 0.5) * 0.05
+                        });
+                        setDropoff({
+                            latitude: baseLocation.latitude + (Math.random() - 0.5) * 0.05,
+                            longitude: baseLocation.longitude + (Math.random() - 0.5) * 0.05
+                        });
+                        console.log('Using fallback locations due to geocoding failure');
+                    }
                 }
             } catch (error) {
                 console.error("Error getting coordinates:", error);
+                // Fallback to default locations
+                const baseLocation = { latitude: 6.9271, longitude: 79.8612 };
+                setPickup({
+                    latitude: baseLocation.latitude + (Math.random() - 0.5) * 0.05,
+                    longitude: baseLocation.longitude + (Math.random() - 0.5) * 0.05
+                });
+                setDropoff({
+                    latitude: baseLocation.latitude + (Math.random() - 0.5) * 0.05,
+                    longitude: baseLocation.longitude + (Math.random() - 0.5) * 0.05
+                });
             }
         };
 
@@ -58,33 +99,67 @@ const RiderConfirmed = () => {
         }
     }, [pickup, dropoff, driverLocation]);
 
-    // Simulate driver movement (in a real app, this would be from Firestore updates)
+    // Listen to real-time driver location updates
     useEffect(() => {
-        if (!pickup || !driverLocation) return;
+        if (!rideRequestId || !driver?.id) {
+            console.log('Missing ride request ID or driver ID for location tracking');
+            return;
+        }
 
-        const interval = setInterval(() => {
-            // Move driver slightly closer to pickup
-            setDriverLocation(prev => {
-                if (!prev) return prev;
-                
-                const latDiff = pickup.latitude - prev.latitude;
-                const lngDiff = pickup.longitude - prev.longitude;
-                
-                return {
-                    latitude: prev.latitude + latDiff * 0.1,
-                    longitude: prev.longitude + lngDiff * 0.1
-                };
-            });
-            
-            // Update estimated arrival time
-            setEstimatedArrival(prev => {
-                const mins = parseInt(prev);
-                return `${Math.max(1, mins - 1)} min`;
-            });
-        }, 3000);
+        console.log('Setting up driver location listener for:', { rideRequestId, driverId: driver.id });
+
+        // Listen to driver location updates from Firebase Realtime Database
+        const locationRef = ref(rtdb, `driverLocations/${rideRequestId}/${driver.id}`);
         
-        return () => clearInterval(interval);
-    }, [pickup, driverLocation]);
+        const locationListener = onValue(locationRef, (snapshot) => {
+            const locationData = snapshot.val();
+            
+            if (locationData) {
+                console.log('Received driver location update:', locationData);
+                setDriverLocation({
+                    latitude: locationData.latitude,
+                    longitude: locationData.longitude,
+                    heading: locationData.heading || 0,
+                    speed: locationData.speed || 0
+                });
+                setIsDriverLocationAvailable(true);
+                
+                // Calculate estimated arrival time based on driver's speed and distance
+                if (pickup && locationData.speed > 0) {
+                    const distance = getDistance(locationData, pickup);
+                    const estimatedTime = Math.round(distance / (locationData.speed * 3.6)); // Convert m/s to km/h
+                    setEstimatedArrival(`${Math.max(1, estimatedTime)} min`);
+                }
+            } else {
+                console.log('No driver location data available');
+                setIsDriverLocationAvailable(false);
+            }
+        }, (error) => {
+            console.error('Error listening to driver location:', error);
+        });
+
+        // Cleanup listener on component unmount
+        return () => {
+            console.log('Cleaning up driver location listener');
+            off(locationRef, 'value', locationListener);
+        };
+    }, [rideRequestId, driver?.id, pickup]);
+
+    // Helper function to calculate distance between two coordinates
+    const getDistance = (coord1, coord2) => {
+        const R = 6371e3; // Earth's radius in meters
+        const φ1 = coord1.latitude * Math.PI/180;
+        const φ2 = coord2.latitude * Math.PI/180;
+        const Δφ = (coord2.latitude-coord1.latitude) * Math.PI/180;
+        const Δλ = (coord2.longitude-coord1.longitude) * Math.PI/180;
+
+        const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+                Math.cos(φ1) * Math.cos(φ2) *
+                Math.sin(Δλ/2) * Math.sin(Δλ/2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+        return R * c; // Distance in meters
+    };
 
     const handleCallDriver = () => {
         if (driver && driver.phoneNumber) {
@@ -179,6 +254,14 @@ const RiderConfirmed = () => {
                 <Text className="text-xl font-bold">{driver?.vehicleNumber || "Vehicle"}</Text>
                 <Text className="text-gray-500">{rideDetails?.name || "Vehicle"}</Text>
                 <Text className="text-blue-600 font-semibold mt-1">Arriving in {estimatedArrival}</Text>
+                
+                {/* Location Status Indicator */}
+                <View className="flex-row items-center mt-2">
+                    <View className={`w-2 h-2 rounded-full mr-2 ${isDriverLocationAvailable ? 'bg-green-500' : 'bg-red-500'}`} />
+                    <Text className={`text-xs ${isDriverLocationAvailable ? 'text-green-600' : 'text-red-600'}`}>
+                        {isDriverLocationAvailable ? 'Live location active' : 'Location unavailable'}
+                    </Text>
+                </View>
             </View>
 
             <View className="p-4 bg-white ">

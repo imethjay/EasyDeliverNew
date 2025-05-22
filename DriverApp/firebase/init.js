@@ -9,6 +9,7 @@ import {
 } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
+import { getDatabase } from 'firebase/database';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Your web app's Firebase configuration
@@ -37,6 +38,9 @@ const db = getFirestore(app);
 // Initialize Storage
 const storage = getStorage(app);
 
+// Initialize Realtime Database
+const rtdb = getDatabase(app);
+
 // Initialize Analytics
 let analytics = null;
 try {
@@ -54,5 +58,5 @@ try {
   console.log('Error initializing analytics:', error);
 }
 
-export { auth, db, storage, analytics };
+export { auth, db, storage, rtdb, analytics };
 export default app; 

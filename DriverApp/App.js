@@ -3,6 +3,9 @@ import { StyleSheet, View, SafeAreaView } from 'react-native';
 import "./global.css"
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
+import { useEffect, useState } from 'react'; 
+import { auth } from './firebase/init';
+import { onAuthStateChanged } from 'firebase/auth';
 import LoginForm from './components/LoginForm';
 import RegistrationForm from './components/RegistrationForm';
 import Register from './components/Register';
@@ -26,10 +29,36 @@ import Profile from './components/Profile.jsx';
 const Stack = createStackNavigator();
 
 export default function App() {
+  const [initializing, setInitializing] = useState(true);
+  const [user, setUser] = useState(null);
+
+  // Handle auth state changes
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setUser(user);
+      if (initializing) {
+        setInitializing(false);
+      }
+    });
+
+    // Cleanup subscription
+    return unsubscribe;
+  }, [initializing]);
+
+  if (initializing) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.loadingContainer}>
+          {/* You can add a loading indicator here if you want */}
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <NavigationContainer>
-        <Stack.Navigator initialRouteName="Login" screenOptions={{ headerShown: false }}>
+        <Stack.Navigator initialRouteName={user ? "DriverHome" : "Login"} screenOptions={{ headerShown: false }}>
           <Stack.Screen name="Login" component={LoginForm} />
           <Stack.Screen name="Registration" component={RegistrationForm} />
           <Stack.Screen name="Register" component={Register} />
@@ -59,10 +88,12 @@ export default function App() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#F9FBFC'
   },
-  container: {
+  loadingContainer: {
     flex: 1,
-  },
+    justifyContent: 'center',
+    alignItems: 'center'
+  }
 });
 

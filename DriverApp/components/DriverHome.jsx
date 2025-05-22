@@ -17,6 +17,7 @@ import { auth, db } from '../firebase/init';
 import { collection, query, where, getDocs, doc, updateDoc, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
 import DeliveryRequestModal from "./DeliveryRequestModal";
+import LocationService from '../utils/LocationService';
 
 const DriverHome = () => {
   const { width } = useWindowDimensions();
@@ -29,6 +30,56 @@ const DriverHome = () => {
   const [incomingRequest, setIncomingRequest] = useState(null);
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [rideRequestsListener, setRideRequestsListener] = useState(null);
+
+  // Poll for ride requests periodically when online
+  useEffect(() => {
+    let pollInterval;
+    
+    const checkForRideRequests = async () => {
+      if (!driver || !isOnline) return;
+      
+      try {
+        // Direct query for ride requests
+        const specificQuery = query(
+          collection(db, 'rideRequests'),
+          where('status', '==', 'searching'),
+          where('selectedCourier', '==', driver.courierId),
+          where('rideDetails.vehicleType', '==', driver.vehicleType)
+        );
+        
+        const snapshot = await getDocs(specificQuery);
+        console.log('🔄 Polling - found requests:', snapshot.docs.length);
+        
+        if (snapshot.docs.length > 0 && !showRequestModal) {
+          // Found a request and no modal is showing - show it
+          const doc = snapshot.docs[0];
+          const requestData = { id: doc.id, ...doc.data() };
+          console.log('🚨 POLLING FOUND NEW REQUEST - SHOWING MODAL!', {
+            requestId: requestData.id,
+            courier: requestData.selectedCourier,
+            vehicle: requestData.rideDetails?.vehicleType
+          });
+          
+          setIncomingRequest(requestData);
+          setShowRequestModal(true);
+        }
+      } catch (error) {
+        console.error('Error polling for ride requests:', error);
+      }
+    };
+    
+    // Check immediately when going online
+    if (isOnline && driver) {
+      checkForRideRequests();
+      
+      // Then check every 5 seconds while online
+      pollInterval = setInterval(checkForRideRequests, 5000);
+    }
+    
+    return () => {
+      if (pollInterval) clearInterval(pollInterval);
+    };
+  }, [isOnline, driver, showRequestModal]);
 
   useEffect(() => {
     fetchDriverData();
@@ -46,6 +97,22 @@ const DriverHome = () => {
 
     const updateDriverStatus = async () => {
       try {
+        // If going online, request location permissions first
+        if (isOnline) {
+          console.log('Driver going online - checking location permissions...');
+          const hasPermission = await LocationService.requestPermissions();
+          if (!hasPermission) {
+            // Don't go online if location permissions not granted
+            Alert.alert(
+              'Location Required', 
+              'Location permission is required to go online and accept deliveries.',
+              [{ text: 'OK' }]
+            );
+            setIsOnline(false); // Reset the toggle
+            return;
+          }
+        }
+
         const driverRef = doc(db, 'drivers', driver.id);
         await updateDoc(driverRef, {
           isOnline,
@@ -55,10 +122,18 @@ const DriverHome = () => {
         
         // Set up or remove the ride requests listener based on driver status
         if (isOnline) {
+          console.log('Driver is now online - setting up ride requests listener');
           setupRideRequestsListener();
-        } else if (rideRequestsListener) {
-          rideRequestsListener();
-          setRideRequestsListener(null);
+        } else {
+          console.log('Driver going offline - removing ride requests listener');
+          if (rideRequestsListener) {
+            rideRequestsListener();
+            setRideRequestsListener(null);
+          }
+          // Stop any active location tracking
+          if (LocationService.getTrackingStatus().isTracking) {
+            LocationService.stopTracking();
+          }
         }
       } catch (error) {
         console.error('Error updating driver status:', error);
@@ -73,32 +148,102 @@ const DriverHome = () => {
   const setupRideRequestsListener = () => {
     if (!driver) return;
 
+    // Prevent duplicate listeners
+    if (rideRequestsListener) {
+      console.log('👥 Listener already exists, cleaning up first...');
+      rideRequestsListener();
+      setRideRequestsListener(null);
+    }
+
     // Query for ride requests matching this driver's criteria
+    console.log('🔍 Setting up ride requests listener for driver:', { 
+      driverId: driver.id,
+      courierId: driver.courierId, 
+      vehicleType: driver.vehicleType,
+      fullDriverData: driver
+    });
+    
+    // First, let's listen to ALL ride requests to see what's available
+    const allRequestsQuery = query(
+      collection(db, 'rideRequests'),
+      where('status', '==', 'searching')
+    );
+
+    console.log('👀 Listening to ALL ride requests for debugging...');
+    
+    const unsubscribeAll = onSnapshot(allRequestsQuery, (querySnapshot) => {
+      console.log('📋 ALL REQUESTS CALLBACK FIRED! Count:', querySnapshot.docs.length);
+      querySnapshot.docs.forEach(doc => {
+        const data = doc.data();
+        console.log('📄 Request:', {
+          id: doc.id,
+          selectedCourier: data.selectedCourier,
+          vehicleType: data.rideDetails?.vehicleType,
+          status: data.status
+        });
+        
+        // Compare with driver data for debugging
+        console.log('🔍 Comparison for request', doc.id, ':', {
+          courierMatch: data.selectedCourier === driver.courierId,
+          vehicleMatch: data.rideDetails?.vehicleType === driver.vehicleType,
+          driverCourier: driver.courierId,
+          requestCourier: data.selectedCourier,
+          driverVehicle: driver.vehicleType,
+          requestVehicle: data.rideDetails?.vehicleType
+        });
+      });
+    }, (error) => {
+      console.error('❌ Error in all requests listener:', error);
+    });
+
+    // Now the specific query for this driver
     const q = query(
       collection(db, 'rideRequests'),
       where('status', '==', 'searching'),
-      where('courierDetails.id', '==', driver.courierId),
+      where('selectedCourier', '==', driver.courierId),
       where('rideDetails.vehicleType', '==', driver.vehicleType)
     );
 
+    console.log('🎯 Setting up SPECIFIC driver query...');
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      querySnapshot.docChanges().forEach((change) => {
-        if (change.type === 'added') {
-          const requestData = {
-            id: change.doc.id,
-            ...change.doc.data()
-          };
-          
-          // Show the delivery request modal
-          setIncomingRequest(requestData);
-          setShowRequestModal(true);
-        }
-      });
+      console.log('📨 Specific query results:', querySnapshot.docs.length);
+      
+      if (querySnapshot.docs.length > 0) {
+        // Found matching requests - process the first one
+        const doc = querySnapshot.docs[0];
+        const requestData = {
+          id: doc.id,
+          ...doc.data()
+        };
+        
+        console.log('📋 Found matching request:', {
+          requestId: requestData.id,
+          courier: requestData.selectedCourier,
+          vehicle: requestData.rideDetails?.vehicleType,
+          status: requestData.status
+        });
+        
+        console.log('🚨 SHOWING MODAL FOR REQUEST!', {
+          requestId: requestData.id,
+          courier: requestData.selectedCourier,
+          vehicle: requestData.rideDetails?.vehicleType
+        });
+        
+        // Show the delivery request modal
+        setIncomingRequest(requestData);
+        setShowRequestModal(true);
+      } else {
+        console.log('📭 No matching requests found for this driver');
+      }
     }, (error) => {
-      console.error('Error setting up ride requests listener:', error);
+      console.error('❌ Error setting up ride requests listener:', error);
     });
 
-    setRideRequestsListener(unsubscribe);
+    // Store both listeners for cleanup
+    setRideRequestsListener(() => {
+      unsubscribe();
+      unsubscribeAll();
+    });
   };
 
   const fetchDriverData = async () => {
@@ -181,6 +326,10 @@ const DriverHome = () => {
         currentRideId: incomingRequest.id,
         updatedAt: serverTimestamp()
       });
+      
+      // Start location tracking for real-time driver tracking
+      console.log('Starting location tracking for accepted trip');
+      await LocationService.startTracking(incomingRequest.id, driver.id);
       
       // Navigate to the delivery details screen
       navigation.navigate('OrderPreview', { rideRequest: incomingRequest });
@@ -330,6 +479,8 @@ const DriverHome = () => {
           </View>
         )}
         
+        {/* Debug section removed */}
+
         {/* Driver Info Card */}
         {driver && (
           <View className="px-6 mt-4">

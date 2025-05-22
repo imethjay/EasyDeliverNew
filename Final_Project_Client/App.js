@@ -4,6 +4,9 @@ import { StyleSheet, View, SafeAreaView } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { AuthProvider } from './components/auth/AuthContext';
+import { useEffect, useState } from 'react';
+import { auth } from './firebase/init';
+import { onAuthStateChanged } from 'firebase/auth';
 
 import LoginScreen from './components/auth/LoginScreen';
 import SignupScreen from './components/auth/SignupScreen';
@@ -28,46 +31,76 @@ import RiderConfirmed from './components/RiderConfirmed';
 
 const Stack = createStackNavigator();
 
+function MainNavigator() {
+  const [initializing, setInitializing] = useState(true);
+  const [user, setUser] = useState(null);
+
+  // Handle auth state changes
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setUser(user);
+      if (initializing) {
+        setInitializing(false);
+      }
+    });
+
+    // Cleanup subscription
+    return unsubscribe;
+  }, [initializing]);
+
+  if (initializing) {
+    return (
+      <View style={styles.loadingContainer}>
+        {/* You can add a loading indicator here if you want */}
+      </View>
+    );
+  }
+
+  return (
+    <Stack.Navigator initialRouteName={user ? "Home" : "Login"} screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="Login" component={LoginScreen} />
+      <Stack.Screen name="Signup" component={SignupScreen} />
+      <Stack.Screen name="Home" component={HomePage} />
+      <Stack.Screen name="Register" component={Register} />
+      <Stack.Screen name="CreateDelivery" component={CreateDelivery} />
+      <Stack.Screen name="CourierSelection" component={CourierSelection} />
+      <Stack.Screen name="TimePicker" component={TimePicker} />
+      <Stack.Screen name="FindRide" component={FindRide} />
+      <Stack.Screen name="MyOrder" component={MyOrder} />
+      <Stack.Screen name="ChatList" component={ChatList} />
+      <Stack.Screen name="ChatScreen" component={ChatScreen} />
+      <Stack.Screen name="Profile" component={Profile} />
+      <Stack.Screen name="TrackingDetails" component={TrackingDetails} />
+      <Stack.Screen name="LiveTrack" component={LiveTrack} />
+      <Stack.Screen name="RescheduleDelivery" component={RescheduleDelivery} />
+      <Stack.Screen name="PaymentUpdates" component={PaymentUpdates} />
+      <Stack.Screen name="SearchingDrivers" component={SearchingDrivers} />
+      <Stack.Screen name="RiderConfirmed" component={RiderConfirmed} />
+    </Stack.Navigator>
+  );
+}
+
 export default function App() {
   return (
-    <NavigationContainer>
+    <SafeAreaView style={styles.safeArea}>
       <AuthProvider>
-        <SafeAreaView style={styles.safeArea}>
-          <View style={styles.container}>
-            <Stack.Navigator initialRouteName="Login" screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="Login" component={LoginScreen} />
-              <Stack.Screen name="Signup" component={SignupScreen} />
-              <Stack.Screen name="Register" component={Register} />
-              <Stack.Screen name="Home" component={HomePage} />
-              <Stack.Screen name="CreateDelivery" component={CreateDelivery} />
-              <Stack.Screen name="CourierSelection" component={CourierSelection} />
-              <Stack.Screen name="TimePicker" component={TimePicker} />
-              <Stack.Screen name="FindRide" component={FindRide} />
-              <Stack.Screen name="MyOrder" component={MyOrder} />
-              <Stack.Screen name="ChatList" component={ChatList} />
-              <Stack.Screen name="ChatScreen" component={ChatScreen} />
-              <Stack.Screen name="Profile" component={Profile} />
-              <Stack.Screen name="OrderPreview" component={TrackingDetails} />
-              <Stack.Screen name="LiveTrack" component={LiveTrack} />
-              <Stack.Screen name="RescheduleDelivery" component={RescheduleDelivery} />
-              <Stack.Screen name="PaymentUpdates" component={PaymentUpdates} />
-              <Stack.Screen name="SearchingDrivers" component={SearchingDrivers} />
-              <Stack.Screen name="RiderConfirmed" component={RiderConfirmed} />
-            </Stack.Navigator>
-            <StatusBar style="auto" />
-          </View>
-        </SafeAreaView>
+        <NavigationContainer>
+          <MainNavigator />
+        </NavigationContainer>
       </AuthProvider>
-    </NavigationContainer>
+      <StatusBar style="auto" />
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#F9FBFC',
   },
-  container: {
+  loadingContainer: {
     flex: 1,
-  },
+    justifyContent: 'center',
+    alignItems: 'center',
+  }
 });
