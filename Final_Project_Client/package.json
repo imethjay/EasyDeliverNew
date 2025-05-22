@@ -32,11 +32,12 @@
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "react-native": "0.76.9",
+    "react-native-css-interop": "^0.1.22",
     "react-native-date-picker": "^5.0.10",
     "react-native-gesture-handler": "~2.20.2",
     "react-native-google-places-autocomplete": "^2.5.7",
     "react-native-image-picker": "^8.2.0",
-    "react-native-maps": "^1.20.1",
+    "react-native-maps": "1.18.0",
     "react-native-maps-directions": "^1.9.0",
     "react-native-modal": "^13.0.1",
     "react-native-modal-datetime-picker": "^18.0.0",
@@ -56,6 +57,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",
+    "@react-native-community/cli": "^18.0.0",
     "react-native-dotenv": "^3.4.11"
   },
   "private": true

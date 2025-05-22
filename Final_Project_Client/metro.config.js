@@ -8,10 +8,10 @@ const config = getDefaultConfig(__dirname);
 // Add support for resolving Typescript and JavaScript files with the same name
 config.resolver.sourceExts = [...config.resolver.sourceExts, 'mjs', 'cjs'];
 
-// Handle module resolution properly
-config.resolver.resolveRequest = (context, moduleName, platform) => {
-  // Return null to let Metro handle the resolution
-  return null;
-};
+// Remove the problematic resolver.resolveRequest override
+// config.resolver.resolveRequest = (context, moduleName, platform) => {
+//   // Return null to let Metro handle the resolution
+//   return null;
+// };
 
 module.exports = withNativeWind(config, { input: './global.css' });
