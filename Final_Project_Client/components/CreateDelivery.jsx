@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { generateUniqueId } from "../utils/helpers"; // Import helper function for ID generation
 
 // Google Maps API Key
 const GOOGLE_PLACES_API_KEY = 'AIzaSyDk4aXK5khZC808S32KRlGir6k0H2RTqsE';
@@ -29,6 +30,11 @@ const CreateDelivery = () => {
   const [dropoffSuggestions, setDropoffSuggestions] = useState([]);
   const [showPickupSuggestions, setShowPickupSuggestions] = useState(false);
   const [showDropoffSuggestions, setShowDropoffSuggestions] = useState(false);
+  const [packageName, setPackageName] = useState('');
+  const [weight, setWeight] = useState('');
+  const [length, setLength] = useState('');
+  const [width, setWidth] = useState('');
+  const [height, setHeight] = useState('');
   const navigation = useNavigation();
 
   // Fetch suggestions from Google Places API
@@ -70,11 +76,26 @@ const CreateDelivery = () => {
   const handleConfirm = () => {
     setModalVisible(false);
     
+    // Create package details object
+    const packageDetails = {
+      packageName: packageName || 'Unnamed Package',
+      trackingId: generateUniqueId(),
+      pickupLocation: pickupLocation,
+      dropoffLocation: dropoffLocation,
+      shipmentType: shipmentType,
+      weight: weight,
+      length: length,
+      width: width,
+      height: height,
+      quantity: packageQuantity,
+      deliveryOption: deliveryOption
+    };
+    
     // Navigate to the appropriate screen based on selection
     if (deliveryOption === "Now") {
-      navigation.navigate("CourierSelection");
+      navigation.navigate("CourierSelection", { packageDetails });
     } else {
-      navigation.navigate("TimePicker");
+      navigation.navigate("TimePicker", { packageDetails });
     }
   };
 
@@ -223,9 +244,27 @@ const CreateDelivery = () => {
 
         {/* Package Dimensions */}
         <View className="flex-row gap-3 space-x-3 mb-3">
-          <TextInput className="flex-1 bg-gray-100 px-4 py-3 rounded-2xl text-gray-800" placeholder="Weight CM" />
-          <TextInput className="flex-1 bg-gray-100 px-4 py-3 rounded-2xl text-gray-800" placeholder="Length CM" />
-          <TextInput className="flex-1 bg-gray-100 px-4 py-3 rounded-2xl text-gray-800" placeholder="Width CM" />
+          <TextInput 
+            className="flex-1 bg-gray-100 px-4 py-3 rounded-2xl text-gray-800" 
+            placeholder="Weight KG" 
+            value={weight}
+            onChangeText={setWeight}
+            keyboardType="numeric"
+          />
+          <TextInput 
+            className="flex-1 bg-gray-100 px-4 py-3 rounded-2xl text-gray-800" 
+            placeholder="Length CM" 
+            value={length}
+            onChangeText={setLength}
+            keyboardType="numeric"
+          />
+          <TextInput 
+            className="flex-1 bg-gray-100 px-4 py-3 rounded-2xl text-gray-800" 
+            placeholder="Width CM" 
+            value={width}
+            onChangeText={setWidth}
+            keyboardType="numeric"
+          />
         </View>
 
         {/* Package Quantity & Height */}
@@ -239,19 +278,33 @@ const CreateDelivery = () => {
               <Ionicons name="add-circle-outline" size={24} color="gray" />
             </TouchableOpacity>
           </View>
-          <TextInput className="flex-1 bg-gray-100 px-4 py-3 rounded-2xl text-gray-800" placeholder="Height" />
+          <TextInput 
+            className="flex-1 bg-gray-100 px-4 py-3 rounded-2xl text-gray-800" 
+            placeholder="Height CM" 
+            value={height}
+            onChangeText={setHeight}
+            keyboardType="numeric"
+          />
         </View>
 
         {/* Name Your Package */}
         <TextInput
           className="bg-gray-100 px-4 py-3 rounded-2xl text-gray-800 mb-6"
           placeholder="Name your package"
+          value={packageName}
+          onChangeText={setPackageName}
         />
 
         {/* Next Button */}
         <TouchableOpacity
           className="bg-[#133BB7] rounded-[20px] py-3 shadow-md"
-          onPress={() => setModalVisible(true)}
+          onPress={() => {
+            if (!pickupLocation || !dropoffLocation) {
+              alert('Please enter pickup and destination locations');
+              return;
+            }
+            setModalVisible(true);
+          }}
         >
           <Text className="text-center text-white font-bold text-lg">Next</Text>
         </TouchableOpacity>

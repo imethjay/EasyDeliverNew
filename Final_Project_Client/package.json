@@ -25,6 +25,7 @@
     "expo-crypto": "^14.1.4",
     "expo-location": "~18.0.10",
     "expo-status-bar": "~2.0.1",
+    "expo-system-ui": "^5.0.7",
     "express": "^5.1.0",
     "firebase": "^11.8.1",
     "lucide-react-native": "^0.477.0",

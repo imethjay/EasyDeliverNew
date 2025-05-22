@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
     View,
     Text,
@@ -6,28 +6,71 @@ import {
     ScrollView,
     Image,
     SafeAreaView,
+    ActivityIndicator,
 } from "react-native";
 import { RadioButton } from "react-native-paper"; // Install react-native-paper
 import tw from "twrnc"; // Install twrnc
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute } from "@react-navigation/native";
+import { collection, getDocs, query, where } from "firebase/firestore";
+import { db } from "../firebase/init";
 
 const CourierSelection = () => {
     const [selectedOption, setSelectedOption] = useState("from");
     const [selectedCourier, setSelectedCourier] = useState(null);
+    const [couriers, setCouriers] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
     const navigation = useNavigation();
+    const route = useRoute();
+    
+    // Get package details from navigation params
+    const { packageDetails } = route.params || { 
+        packageDetails: { 
+            packageName: "JBL Earbuds", 
+            trackingId: "23D47389",
+            pickupLocation: "20/6, Panadura",
+            dropoffLocation: "20/6, Panadura" 
+        } 
+    };
 
-    const couriers = [
-        { id: 1, name: "Pronto Lanka", image: require("../assets/icon/pronto.png") },
-        { id: 2, name: "Pronto Lanka", image: require("../assets/icon/pronto.png") },
-        { id: 3, name: "Pronto Lanka", image: require("../assets/icon/pronto.png") },
-        { id: 4, name: "Pronto Lanka", image: require("../assets/icon/pronto.png") },
-    ];
+    // Fetch active couriers from Firebase
+    useEffect(() => {
+        const fetchCouriers = async () => {
+            setLoading(true);
+            try {
+                // Query for active couriers only
+                const couriersQuery = query(
+                    collection(db, "couriers"),
+                    where("isActive", "==", true)
+                );
+                
+                const querySnapshot = await getDocs(couriersQuery);
+                const couriersList = querySnapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+                
+                setCouriers(couriersList);
+            } catch (err) {
+                console.error("Error fetching couriers:", err);
+                setError("Failed to load couriers. Please try again.");
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchCouriers();
+    }, []);
 
     // Function to handle navigation to FindRide page
     const handleNextPress = () => {
         if (selectedCourier) {
-            navigation.navigate("FindRide");
+            // Pass selected courier and package details to the next screen
+            navigation.navigate("FindRide", { 
+                selectedCourier,
+                packageDetails
+            });
         }
     };
     
@@ -56,9 +99,9 @@ const CourierSelection = () => {
                         className="w-10 h-10 rounded-md"
                     />
                     <View className="ml-3 flex-1">
-                        <Text className="text-black font-bold text-lg">JBL Earbuds</Text>
+                        <Text className="text-black font-bold text-lg">{packageDetails.packageName}</Text>
                         <Text className="text-gray-400 text-xs">
-                            #TrackingID: 23D47389
+                            #TrackingID: {packageDetails.trackingId}
                         </Text>
                     </View>
                     <TouchableOpacity>
@@ -77,7 +120,7 @@ const CourierSelection = () => {
                             status={selectedOption === "from" ? "checked" : "unchecked"}
                             onPress={() => setSelectedOption("from")}
                         />
-                        <Text className="ml-2 text-black text-base">From: 20/6, Panadura</Text>
+                        <Text className="ml-2 text-black text-base">From: {packageDetails.pickupLocation}</Text>
                     </View>
 
                     <View
@@ -89,7 +132,7 @@ const CourierSelection = () => {
                             status={selectedOption === "to" ? "checked" : "unchecked"}
                             onPress={() => setSelectedOption("to")}
                         />
-                        <Text className="ml-2 text-black text-base">Likely to: 20/6, Panadura</Text>
+                        <Text className="ml-2 text-black text-base">Likely to: {packageDetails.dropoffLocation}</Text>
                     </View>
                 </View>
             </View>
@@ -98,27 +141,50 @@ const CourierSelection = () => {
             <Text className="text-black mt-6 mb-3 text-lg font-semibold">
                 Select a courier service
             </Text>
-            {couriers.map((courier) => (
-                <TouchableOpacity
-                    key={courier.id}
-                    className={`flex-row items-center bg-white shadow-md rounded-[20px] p-4 mb-3 w-full ${selectedCourier === courier.id ? "border-2 border-blue-800" : ""
-                        }`}
-                    onPress={() => setSelectedCourier(courier.id)}
-                >
-                    <Image
-                        source={courier.image}
-                        className="w-14 h-14 rounded-md"
-                    />
-                    <Text className="text-black ml-4 flex-1 text-lg font-semibold">
-                        {courier.name}
-                    </Text>
-                </TouchableOpacity>
-            ))}
+
+            {loading ? (
+                <View className="flex-1 justify-center items-center">
+                    <ActivityIndicator size="large" color="#133BB7" />
+                </View>
+            ) : error ? (
+                <View className="bg-red-100 p-4 rounded-lg">
+                    <Text className="text-red-500">{error}</Text>
+                </View>
+            ) : couriers.length === 0 ? (
+                <View className="bg-gray-100 p-4 rounded-lg">
+                    <Text className="text-gray-500">No courier services available at the moment.</Text>
+                </View>
+            ) : (
+                <ScrollView>
+                    {couriers.map((courier) => (
+                        <TouchableOpacity
+                            key={courier.id}
+                            className={`flex-row items-center bg-white shadow-md rounded-[20px] p-4 mb-3 w-full ${selectedCourier === courier.id ? "border-2 border-blue-800" : ""}`}
+                            onPress={() => setSelectedCourier(courier.id)}
+                        >
+                            {courier.imageUrl ? (
+                                <Image
+                                    source={{ uri: courier.imageUrl }}
+                                    className="w-14 h-14 rounded-md"
+                                    defaultSource={require("../assets/icon/pronto.png")}
+                                />
+                            ) : (
+                                <Image
+                                    source={require("../assets/icon/pronto.png")}
+                                    className="w-14 h-14 rounded-md"
+                                />
+                            )}
+                            <Text className="text-black ml-4 flex-1 text-lg font-semibold">
+                                {courier.courierName}
+                            </Text>
+                        </TouchableOpacity>
+                    ))}
+                </ScrollView>
+            )}
 
             {/* Next Button */}
             <TouchableOpacity
-                className={`w-full py-4 mt-2 rounded-[40px] ${selectedCourier ? "bg-blue-800" : "bg-gray-400"
-                    }`}
+                className={`w-full py-4 mt-2 rounded-[40px] ${selectedCourier ? "bg-blue-800" : "bg-gray-400"}`}
                 disabled={!selectedCourier}
                 onPress={handleNextPress}
             >
