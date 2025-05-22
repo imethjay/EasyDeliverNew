@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   View,
   Text,
@@ -6,9 +6,15 @@ import {
   TextInput,
   Modal,
   ScrollView,
+  Platform,
+  StyleSheet
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
+
+// Google Maps API Key
+const GOOGLE_PLACES_API_KEY = 'AIzaSyDk4aXK5khZC808S32KRlGir6k0H2RTqsE';
 
 const CreateDelivery = () => {
   const [shipmentType, setShipmentType] = useState("Parcel");
@@ -46,16 +52,137 @@ const CreateDelivery = () => {
 
       {/* Pickup & Drop-off Fields */}
       <View className="mb-4">
-        <TouchableOpacity className="flex-row items-center bg-gray-100 px-4 py-3 rounded-2xl">
-          <Ionicons name="location-outline" size={20} color="gray" />
-          <Text className="ml-3 text-gray-600 flex-1">Pickup Location</Text>
-          <Ionicons name="add-circle-outline" size={20} color="gray" />
-        </TouchableOpacity>
-        <TouchableOpacity className="flex-row items-center bg-gray-100 px-4 py-3 mt-3 rounded-2xl">
-          <Ionicons name="location-outline" size={20} color="gray" />
-          <Text className="ml-3 text-gray-600 flex-1">Package Destination</Text>
-          <Ionicons name="add-circle-outline" size={20} color="gray" />
-        </TouchableOpacity>
+        <View className="bg-gray-100 rounded-2xl overflow-hidden">
+          <GooglePlacesAutocomplete
+            placeholder="Pickup Location"
+            onPress={(data, details = null) => {
+              // 'details' is provided when fetchDetails = true
+              console.log(data, details);
+            }}
+            query={{
+              key: 'AIzaSyDk4aXK5khZC808S32KRlGir6k0H2RTqsE',
+              language: 'en',
+            }}
+            styles={{
+              textInput: {
+                backgroundColor: 'transparent',
+                paddingLeft: 10,
+                height: 50,
+                color: '#4B5563',
+              },
+              textInputContainer: {
+                backgroundColor: 'transparent',
+                borderTopWidth: 0,
+                borderBottomWidth: 0,
+                paddingHorizontal: 10,
+              },
+              listView: {
+                backgroundColor: 'white',
+                marginTop: 10,
+                borderRadius: 10,
+                elevation: 3,
+                position: 'absolute',
+                width: '100%',
+                zIndex: 1000,
+                top: 50,
+              },
+              row: {
+                padding: 15,
+                height: 58,
+                flexDirection: 'row',
+                alignItems: 'center',
+              },
+              separator: {
+                height: 0.5,
+                backgroundColor: '#c8c7cc',
+              },
+              description: {
+                color: '#4B5563',
+              },
+              poweredContainer: {
+                display: 'none',
+              },
+            }}
+            fetchDetails={true}
+            enablePoweredByContainer={false}
+            renderLeftButton={() => (
+              <View style={{ justifyContent: 'center', marginLeft: 8 }}>
+                <Ionicons name="location-outline" size={20} color="gray" />
+              </View>
+            )}
+            renderRightButton={() => (
+              <TouchableOpacity style={{ justifyContent: 'center', marginRight: 8 }}>
+                <Ionicons name="add-circle-outline" size={20} color="gray" />
+              </TouchableOpacity>
+            )}
+          />
+        </View>
+        
+        <View className="bg-gray-100 rounded-2xl overflow-hidden mt-3">
+          <GooglePlacesAutocomplete
+            placeholder="Package Destination"
+            onPress={(data, details = null) => {
+              // 'details' is provided when fetchDetails = true
+              console.log(data, details);
+            }}
+            query={{
+              key: 'AIzaSyDk4aXK5khZC808S32KRlGir6k0H2RTqsE',
+              language: 'en',
+            }}
+            styles={{
+              textInput: {
+                backgroundColor: 'transparent',
+                paddingLeft: 10,
+                height: 50,
+                color: '#4B5563',
+              },
+              textInputContainer: {
+                backgroundColor: 'transparent',
+                borderTopWidth: 0,
+                borderBottomWidth: 0,
+                paddingHorizontal: 10,
+              },
+              listView: {
+                backgroundColor: 'white',
+                marginTop: 10,
+                borderRadius: 10,
+                elevation: 3,
+                position: 'absolute',
+                width: '100%',
+                zIndex: 1000,
+                top: 50,
+              },
+              row: {
+                padding: 15,
+                height: 58,
+                flexDirection: 'row',
+                alignItems: 'center',
+              },
+              separator: {
+                height: 0.5,
+                backgroundColor: '#c8c7cc',
+              },
+              description: {
+                color: '#4B5563',
+              },
+              poweredContainer: {
+                display: 'none',
+              },
+            }}
+            fetchDetails={true}
+            enablePoweredByContainer={false}
+            renderLeftButton={() => (
+              <View style={{ justifyContent: 'center', marginLeft: 8 }}>
+                <Ionicons name="location-outline" size={20} color="gray" />
+              </View>
+            )}
+            renderRightButton={() => (
+              <TouchableOpacity style={{ justifyContent: 'center', marginRight: 8 }}>
+                <Ionicons name="add-circle-outline" size={20} color="gray" />
+              </TouchableOpacity>
+            )}
+          />
+        </View>
       </View>
 
       {/* Shipment Type */}
@@ -164,5 +291,22 @@ const CreateDelivery = () => {
     </ScrollView>
   );
 };
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    padding: 10,
+    paddingTop: 50,
+    backgroundColor: '#ecf0f1',
+  },
+  autocompleteContainer: {
+    flex: 1,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    zIndex: 1,
+  },
+});
 
 export default CreateDelivery;
