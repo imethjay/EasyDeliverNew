@@ -1,6 +1,8 @@
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View, SafeAreaView } from 'react-native';
+import { StyleSheet, View, SafeAreaView } from 'react-native';
 import "./global.css"
+import { NavigationContainer } from '@react-navigation/native';
+import { createStackNavigator } from '@react-navigation/stack';
 import LoginForm from './components/LoginForm';
 import RegistrationForm from './components/RegistrationForm';
 import Register from './components/Register';
@@ -21,40 +23,35 @@ import ResheduleDelivery from './components/ResheduleDelivery';
 import ChatOp from './components/chatOp';
 import Profile from './components/Profile.jsx';
 
-
+const Stack = createStackNavigator();
 
 export default function App() {
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
-
-        <LoginForm />
-        {/* <RegistrationForm/> */}
-        {/* <Register /> */}
-        {/* <ResetPassword /> */}
-        {/* <OTPVerification/> */}
-        {/* <ResetPassword /> */}
-
-        {/* <DriverHome /> */}
-        {/* <StatsPage/> */}
-
-        {/* <MyOrder/> */}
-        {/* <OrderPreview/> */}
-     {/* <ResheduleDelivery/> */}
-        {/* <LiveTrack/> */}
-
-        {/* <DeliveryRequestModal/> */}
-        {/* <RiderConfirmed/> */}
-        {/* <CustomerConfiremed/> */}
-
-        {/* <DeliveryComplete /> */}
-        {/* <ProofOfDelevery/> */}
-        {/* <ChatList/> */}
-         {/* <ChatOp/> */}
-         {/* <Profile/> */}
-
+      <NavigationContainer>
+        <Stack.Navigator initialRouteName="Login" screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="Login" component={LoginForm} />
+          <Stack.Screen name="Registration" component={RegistrationForm} />
+          <Stack.Screen name="Register" component={Register} />
+          <Stack.Screen name="ResetPassword" component={ResetPassword} />
+          <Stack.Screen name="OTPVerification" component={OTPVerification} />
+          <Stack.Screen name="DriverHome" component={DriverHome} />
+          <Stack.Screen name="StatsPage" component={StatsPage} />
+          <Stack.Screen name="MyOrder" component={MyOrder} />
+          <Stack.Screen name="OrderPreview" component={OrderPreview} />
+          <Stack.Screen name="ResheduleDelivery" component={ResheduleDelivery} />
+          <Stack.Screen name="LiveTrack" component={LiveTrack} />
+          <Stack.Screen name="DeliveryRequestModal" component={DeliveryRequestModal} />
+          <Stack.Screen name="RiderConfirmed" component={RiderConfirmed} />
+          <Stack.Screen name="CustomerConfiremed" component={CustomerConfiremed} />
+          <Stack.Screen name="DeliveryComplete" component={DeliveryComplete} />
+          <Stack.Screen name="ProofOfDelevery" component={ProofOfDelevery} />
+          <Stack.Screen name="ChatList" component={ChatList} />
+          <Stack.Screen name="ChatOp" component={ChatOp} />
+          <Stack.Screen name="Profile" component={Profile} />
+        </Stack.Navigator>
         <StatusBar style="auto" />
-      </View>
+      </NavigationContainer>
     </SafeAreaView>
   );
 }
@@ -66,8 +63,6 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 });
 

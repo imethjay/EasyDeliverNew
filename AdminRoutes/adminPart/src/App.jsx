@@ -4,6 +4,7 @@ import Login from './components/Login';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import CouriersList from './components/CouriersList';
+import CourierDetails from './components/CourierDetails';
 import CreateCourier from './components/CreateCourier';
 import './App.css';
 
@@ -42,6 +43,7 @@ function App() {
             <Route path="/" element={<Navigate to="/dashboard" />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/couriers" element={<CouriersList />} />
+            <Route path="/courier/:id" element={<CourierDetails />} />
             <Route path="/create-courier" element={<CreateCourier />} />
             <Route path="*" element={<Navigate to="/dashboard" />} />
           </Routes>
