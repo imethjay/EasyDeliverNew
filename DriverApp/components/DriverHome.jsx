@@ -8,13 +8,15 @@ import {
   Image,
   ActivityIndicator,
   Alert,
+  Switch,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { useWindowDimensions } from "react-native";
 import { widthPercentageToDP as wp, heightPercentageToDP as hp } from "react-native-responsive-screen";
 import { auth, db } from '../firebase/init';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, updateDoc, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
+import DeliveryRequestModal from "./DeliveryRequestModal";
 
 const DriverHome = () => {
   const { width } = useWindowDimensions();
@@ -23,10 +25,81 @@ const DriverHome = () => {
   const [driver, setDriver] = useState(null);
   const [loading, setLoading] = useState(true);
   const [trackingHistory, setTrackingHistory] = useState([]);
+  const [isOnline, setIsOnline] = useState(false);
+  const [incomingRequest, setIncomingRequest] = useState(null);
+  const [showRequestModal, setShowRequestModal] = useState(false);
+  const [rideRequestsListener, setRideRequestsListener] = useState(null);
 
   useEffect(() => {
     fetchDriverData();
+    return () => {
+      // Clean up listeners when component unmounts
+      if (rideRequestsListener) {
+        rideRequestsListener();
+      }
+    };
   }, []);
+
+  // Toggle driver availability and listen for ride requests
+  useEffect(() => {
+    if (!driver) return;
+
+    const updateDriverStatus = async () => {
+      try {
+        const driverRef = doc(db, 'drivers', driver.id);
+        await updateDoc(driverRef, {
+          isOnline,
+          isAvailable: isOnline,
+          lastUpdated: serverTimestamp()
+        });
+        
+        // Set up or remove the ride requests listener based on driver status
+        if (isOnline) {
+          setupRideRequestsListener();
+        } else if (rideRequestsListener) {
+          rideRequestsListener();
+          setRideRequestsListener(null);
+        }
+      } catch (error) {
+        console.error('Error updating driver status:', error);
+        Alert.alert('Error', 'Failed to update your availability status');
+      }
+    };
+
+    updateDriverStatus();
+  }, [isOnline, driver]);
+
+  // Set up a listener for new ride requests
+  const setupRideRequestsListener = () => {
+    if (!driver) return;
+
+    // Query for ride requests matching this driver's criteria
+    const q = query(
+      collection(db, 'rideRequests'),
+      where('status', '==', 'searching'),
+      where('courierDetails.id', '==', driver.courierId),
+      where('rideDetails.vehicleType', '==', driver.vehicleType)
+    );
+
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      querySnapshot.docChanges().forEach((change) => {
+        if (change.type === 'added') {
+          const requestData = {
+            id: change.doc.id,
+            ...change.doc.data()
+          };
+          
+          // Show the delivery request modal
+          setIncomingRequest(requestData);
+          setShowRequestModal(true);
+        }
+      });
+    }, (error) => {
+      console.error('Error setting up ride requests listener:', error);
+    });
+
+    setRideRequestsListener(unsubscribe);
+  };
 
   const fetchDriverData = async () => {
     setLoading(true);
@@ -53,6 +126,9 @@ const DriverHome = () => {
           id: querySnapshot.docs[0].id,
           ...driverData
         });
+        
+        // Set online status based on stored value
+        setIsOnline(driverData.isOnline || false);
         
         // For demo, creating sample tracking history
         setTrackingHistory([
@@ -82,6 +158,67 @@ const DriverHome = () => {
     setTrackingID("");
   };
 
+  const handleAcceptRequest = async () => {
+    if (!incomingRequest) return;
+    
+    try {
+      // Update the ride request status
+      const requestRef = doc(db, 'rideRequests', incomingRequest.id);
+      await updateDoc(requestRef, {
+        status: 'accepted',
+        driverId: driver.id,
+        driverName: driver.fullName,
+        driverPhone: driver.phoneNumber || '',
+        vehicleNumber: driver.vehicleNumber,
+        acceptedAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      
+      // Update driver availability
+      const driverRef = doc(db, 'drivers', driver.id);
+      await updateDoc(driverRef, {
+        isAvailable: false,
+        currentRideId: incomingRequest.id,
+        updatedAt: serverTimestamp()
+      });
+      
+      // Navigate to the delivery details screen
+      navigation.navigate('OrderPreview', { rideRequest: incomingRequest });
+      
+      // Close the modal
+      setShowRequestModal(false);
+      setIncomingRequest(null);
+    } catch (error) {
+      console.error('Error accepting ride request:', error);
+      Alert.alert('Error', 'Failed to accept the delivery request');
+    }
+  };
+
+  const handleDeclineRequest = async () => {
+    if (!incomingRequest) return;
+    
+    try {
+      // Update the ride request with decline info
+      const requestRef = doc(db, 'rideRequests', incomingRequest.id);
+      await updateDoc(requestRef, {
+        declinedDrivers: [
+          ...(incomingRequest.declinedDrivers || []),
+          {
+            driverId: driver.id,
+            declinedAt: serverTimestamp()
+          }
+        ],
+        updatedAt: serverTimestamp()
+      });
+      
+      // Close the modal
+      setShowRequestModal(false);
+      setIncomingRequest(null);
+    } catch (error) {
+      console.error('Error declining ride request:', error);
+    }
+  };
+
   const [activeTab, setActiveTab] = useState("Home"); // Default selected tab
   
   const menuItems = [
@@ -102,6 +239,14 @@ const DriverHome = () => {
 
   return (
     <View className="flex-1 w-full bg-gray-100">
+      {/* Delivery Request Modal */}
+      <DeliveryRequestModal 
+        visible={showRequestModal}
+        rideRequest={incomingRequest}
+        onAccept={handleAcceptRequest}
+        onDecline={handleDeclineRequest}
+      />
+      
       {/* Header Section */}
       <View
         className="rounded-b-3xl px-6"
@@ -164,9 +309,30 @@ const DriverHome = () => {
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: hp("10%") }}>
+        {/* Online Status Toggle */}
+        {driver && driver.status === 'approved' && (
+          <View className="mx-6 mt-6 bg-white rounded-xl p-4 shadow-sm">
+            <View className="flex-row justify-between items-center">
+              <View>
+                <Text className="text-lg font-semibold">Available for Deliveries</Text>
+                <Text className="text-gray-500">
+                  {isOnline ? 'You are online and can receive delivery requests' : 'Go online to receive delivery requests'}
+                </Text>
+              </View>
+              <Switch
+                trackColor={{ false: "#767577", true: "#4ade80" }}
+                thumbColor={isOnline ? "#ffffff" : "#f4f3f4"}
+                ios_backgroundColor="#3e3e3e"
+                onValueChange={setIsOnline}
+                value={isOnline}
+              />
+            </View>
+          </View>
+        )}
+        
         {/* Driver Info Card */}
         {driver && (
-          <View className="px-6 mt-6">
+          <View className="px-6 mt-4">
             <View className="bg-white rounded-xl p-4 shadow-sm">
               <Text className="text-lg font-semibold mb-2">Driver Information</Text>
               <View className="flex-row items-center mb-2">

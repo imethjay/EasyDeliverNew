@@ -21,6 +21,8 @@ import TrackingDetails from './components/OrderPreview';
 import LiveTrack from './components/LiveTrack';
 import RescheduleDelivery from './components/RescheduleDelivery';
 import PaymentUpdates from './components/PaymentUpdates'; 
+import SearchingDrivers from './components/SearchingDrivers';
+import RiderConfirmed from './components/RiderConfirmed';
 
 // Import other components as needed
 
@@ -49,6 +51,8 @@ export default function App() {
               <Stack.Screen name="LiveTrack" component={LiveTrack} />
               <Stack.Screen name="RescheduleDelivery" component={RescheduleDelivery} />
               <Stack.Screen name="PaymentUpdates" component={PaymentUpdates} />
+              <Stack.Screen name="SearchingDrivers" component={SearchingDrivers} />
+              <Stack.Screen name="RiderConfirmed" component={RiderConfirmed} />
             </Stack.Navigator>
             <StatusBar style="auto" />
           </View>

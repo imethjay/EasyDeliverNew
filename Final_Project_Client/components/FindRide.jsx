@@ -237,10 +237,11 @@ const FindRide = () => {
             return;
         }
         
-        // Navigate to the appropriate screen with all details
-        navigation.navigate("MyOrder", {
+        // Navigate to the SearchingDrivers screen with all details
+        navigation.navigate("SearchingDrivers", {
             packageDetails,
             courierDetails,
+            selectedCourier,
             rideDetails: selectedRideDetails,
             distance,
             duration
