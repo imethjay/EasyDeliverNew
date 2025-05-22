@@ -45,11 +45,33 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     try {
+      if (!email || !password) {
+        throw new Error('Email and password are required');
+      }
+      
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       return userCredential.user;
     } catch (error) {
-      console.error('Login error:', error);
-      throw error;
+      console.error('Login error:', {
+        code: error.code,
+        message: error.message,
+        email: email,
+        timestamp: new Date().toISOString()
+      });
+      
+      // Provide more user-friendly error messages
+      switch (error.code) {
+        case 'auth/invalid-credential':
+          throw new Error('Invalid email or password');
+        case 'auth/user-not-found':
+          throw new Error('No account found with this email');
+        case 'auth/wrong-password':
+          throw new Error('Incorrect password');
+        case 'auth/too-many-requests':
+          throw new Error('Too many failed attempts. Please try again later');
+        default:
+          throw new Error('An error occurred during login. Please try again');
+      }
     }
   };
 

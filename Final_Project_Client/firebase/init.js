@@ -1,5 +1,6 @@
 // Firebase App (the core Firebase SDK) is always required and must be listed first
 import { initializeApp } from 'firebase/app';
+import { Platform } from 'react-native';
 
 // Add the Firebase products that you want to use
 import { 
@@ -37,10 +38,20 @@ const db = getFirestore(app);
 const storage = getStorage(app);
 
 // Initialize Analytics
-let analytics;
-if (app.name && typeof window !== 'undefined') {
-  const { getAnalytics } = require('firebase/analytics');
-  analytics = getAnalytics(app);
+let analytics = null;
+try {
+  if (Platform.OS === 'web' && app.name) {
+    const { getAnalytics, isSupported } = require('firebase/analytics');
+    isSupported().then(supported => {
+      if (supported) {
+        analytics = getAnalytics(app);
+      }
+    }).catch(err => {
+      console.log('Analytics not supported:', err.message);
+    });
+  }
+} catch (error) {
+  console.log('Error initializing analytics:', error);
 }
 
 export { auth, db, storage, analytics };
