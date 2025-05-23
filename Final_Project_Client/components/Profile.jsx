@@ -1,15 +1,40 @@
 import React from "react";
 import { useAuth } from "./auth/AuthContext";
-import { View, Text, Image, TouchableOpacity, Switch, ScrollView } from "react-native";
+import { View, Text, Image, TouchableOpacity, Switch, ScrollView, Alert } from "react-native";
 import { Ionicons, MaterialIcons, FontAwesome } from "@expo/vector-icons";
 
 const Profile = ({ navigation }) => {
-    const { user } = useAuth();
+    const { user, logout } = useAuth();
     const [isTwoFactorEnabled, setIsTwoFactorEnabled] = React.useState(false);
     const [isPushEnabled, setIsPushEnabled] = React.useState(true);
 
+    const handleLogout = async () => {
+        Alert.alert(
+            "Logout",
+            "Are you sure you want to logout?",
+            [
+                {
+                    text: "Cancel",
+                    style: "cancel"
+                },
+                {
+                    text: "Logout",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            await logout();
+                            navigation.replace('Login');
+                        } catch (error) {
+                            Alert.alert('Error', 'Failed to logout. Please try again.');
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
     return (
-        <View className="flex-1 w-full bg-gray-100 p-4">
+        <ScrollView className="flex-1 w-full bg-gray-100 p-4">
             {/* Header */}
             
             <View className="flex-row w-full items-center justify-between mb-4">
@@ -98,7 +123,7 @@ const Profile = ({ navigation }) => {
             </View>
 
             {/* Settings */}
-            <View className="bg-white p-4 rounded-2xl">
+            <View className="bg-white p-4 rounded-2xl mb-4">
                 <Text className="text-gray-500 font-semibold">Settings</Text>
                 <View className="flex-row justify-between items-center mt-2">
                     <Text className="text-black">Push Notifications</Text>
@@ -119,7 +144,19 @@ const Profile = ({ navigation }) => {
                     />
                 </View>
             </View>
-        </View>
+
+            {/* Logout Button */}
+            <View className="bg-white p-4 rounded-2xl mb-6">
+                <TouchableOpacity 
+                    onPress={handleLogout}
+                    className="flex-row items-center justify-center py-3 bg-red-500 rounded-xl"
+                    activeOpacity={0.8}
+                >
+                    <Ionicons name="log-out-outline" size={20} color="white" className="mr-2" />
+                    <Text className="text-white font-semibold text-base ml-2">Logout</Text>
+                </TouchableOpacity>
+            </View>
+        </ScrollView>
     );
 };
 

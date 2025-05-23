@@ -54,7 +54,8 @@
     "react-navigation": "^5.0.0",
     "tailwind-react-native-classnames": "^1.5.1",
     "tailwindcss": "^3.4.17",
-    "twrnc": "^4.6.1"
+    "twrnc": "^4.6.1",
+    "expo-linear-gradient": "~14.0.2"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",

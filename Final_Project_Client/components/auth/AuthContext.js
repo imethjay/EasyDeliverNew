@@ -5,7 +5,8 @@ import {
   signOut,
   onAuthStateChanged
 } from 'firebase/auth';
-import { auth } from '../../firebase/init';
+import { doc, setDoc } from 'firebase/firestore';
+import { auth, db } from '../../firebase/init';
 
 const AuthContext = createContext(null);
 
@@ -26,11 +27,31 @@ export const AuthProvider = ({ children }) => {
     return () => unsubscribe();
   }, []);
 
-  const signup = async (email, password) => {
+  const signup = async (email, password, userProfile = null) => {
     try {
       console.log('Attempting to sign up with:', email);
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       console.log('Signup successful:', userCredential.user);
+      
+      // If user profile data is provided, store it in Firestore
+      if (userProfile && userCredential.user) {
+        const userDoc = {
+          uid: userCredential.user.uid,
+          email: userCredential.user.email,
+          name: userProfile.name,
+          mobile: userProfile.mobile,
+          address: userProfile.address,
+          city: userProfile.city,
+          zipCode: userProfile.zipCode,
+          userType: 'customer', // Default user type for mobile app users
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        
+        await setDoc(doc(db, 'users', userCredential.user.uid), userDoc);
+        console.log('User profile saved to Firestore');
+      }
+      
       return userCredential.user;
     } catch (error) {
       console.error('Signup error:', {

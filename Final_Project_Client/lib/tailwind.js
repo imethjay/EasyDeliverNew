@@ -6,7 +6,13 @@ export const tw = StyleSheet.create({
     flex: 1,
     padding: 16,
     backgroundColor: '#fff',
+  },
+  scrollContainer: {
+    flexGrow: 1,
     justifyContent: 'center',
+  },
+  inputContainer: {
+    marginBottom: 16,
   },
   // Text styles
   title: {
@@ -27,6 +33,18 @@ export const tw = StyleSheet.create({
     marginBottom: 16,
     fontSize: 16,
   },
+  multilineInput: {
+    width: '100%',
+    minHeight: 80,
+    borderWidth: 1,
+    borderColor: '#d1d5db', // gray-300
+    borderRadius: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    marginBottom: 16,
+    fontSize: 16,
+    textAlignVertical: 'top',
+  },
   // Button styles
   button: {
     width: '100%',
@@ -45,6 +63,7 @@ export const tw = StyleSheet.create({
   // Link styles
   link: {
     marginTop: 16,
+    marginBottom: 20,
   },
   linkText: {
     color: '#3b82f6', // blue-500
