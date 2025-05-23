@@ -4,7 +4,7 @@ import Icon from 'react-native-vector-icons/Feather';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons, FontAwesome } from "@expo/vector-icons";
 import { useRoute } from '@react-navigation/native';
-import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, updateDoc, serverTimestamp, increment } from 'firebase/firestore';
 import { db } from '../firebase/init';
 import LocationService from '../utils/LocationService';
 
@@ -45,6 +45,7 @@ const ProofOfDeliveryScreen = ({ navigation }) => {
 
         try {
             setIsCompleting(true);
+            console.log('🏁 Completing delivery:', rideRequest.id);
 
             // Update the ride request status to completed
             const requestRef = doc(db, 'rideRequests', rideRequest.id);
@@ -55,14 +56,27 @@ const ProofOfDeliveryScreen = ({ navigation }) => {
                 updatedAt: serverTimestamp()
             });
 
+            // Reset driver availability - make them available for new requests
+            if (rideRequest.driverId) {
+                const driverRef = doc(db, 'drivers', rideRequest.driverId);
+                await updateDoc(driverRef, {
+                    isAvailable: true, // Make driver available again
+                    currentRideId: null, // Clear current ride
+                    lastDeliveryCompletedAt: serverTimestamp(),
+                    totalCompletedDeliveries: increment(1), // Increment completed count
+                    updatedAt: serverTimestamp()
+                });
+                console.log('✅ Driver availability reset - ready for new requests');
+            }
+
             // Stop location tracking
-            console.log('Stopping location tracking - delivery completed');
+            console.log('🛑 Stopping location tracking - delivery completed');
             await LocationService.stopTracking();
 
             // Show success message
             Alert.alert(
                 'Delivery Completed!', 
-                'Thank you for completing the delivery successfully.',
+                'Thank you for completing the delivery successfully. You are now available for new delivery requests.',
                 [
                     {
                         text: 'OK',
@@ -72,7 +86,7 @@ const ProofOfDeliveryScreen = ({ navigation }) => {
             );
 
         } catch (error) {
-            console.error('Error completing delivery:', error);
+            console.error('❌ Error completing delivery:', error);
             Alert.alert('Error', 'Failed to complete delivery. Please try again.');
         } finally {
             setIsCompleting(false);

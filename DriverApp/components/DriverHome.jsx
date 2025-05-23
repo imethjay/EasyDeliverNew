@@ -14,10 +14,11 @@ import { useNavigation } from "@react-navigation/native";
 import { useWindowDimensions } from "react-native";
 import { widthPercentageToDP as wp, heightPercentageToDP as hp } from "react-native-responsive-screen";
 import { auth, db } from '../firebase/init';
-import { collection, query, where, getDocs, doc, updateDoc, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, updateDoc, onSnapshot, addDoc, serverTimestamp, arrayUnion } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
 import DeliveryRequestModal from "./DeliveryRequestModal";
 import LocationService from '../utils/LocationService';
+import DeliveryRequestManager from '../utils/DeliveryRequestManager';
 
 const DriverHome = () => {
   const { width } = useWindowDimensions();
@@ -29,70 +30,31 @@ const DriverHome = () => {
   const [isOnline, setIsOnline] = useState(false);
   const [incomingRequest, setIncomingRequest] = useState(null);
   const [showRequestModal, setShowRequestModal] = useState(false);
-  const [rideRequestsListener, setRideRequestsListener] = useState(null);
-  const [activeTab, setActiveTab] = useState("Home"); // Default selected tab
-
-  // Poll for ride requests periodically when online
-  useEffect(() => {
-    let pollInterval;
-    
-    const checkForRideRequests = async () => {
-      if (!driver || !isOnline) return;
-      
-      try {
-        // Direct query for ride requests
-        const specificQuery = query(
-          collection(db, 'rideRequests'),
-          where('status', '==', 'searching'),
-          where('selectedCourier', '==', driver.courierId),
-          where('rideDetails.vehicleType', '==', driver.vehicleType)
-        );
-        
-        const snapshot = await getDocs(specificQuery);
-        console.log('🔄 Polling - found requests:', snapshot.docs.length);
-        
-        if (snapshot.docs.length > 0 && !showRequestModal) {
-          // Found a request and no modal is showing - show it
-          const doc = snapshot.docs[0];
-          const requestData = { id: doc.id, ...doc.data() };
-          console.log('🚨 POLLING FOUND NEW REQUEST - SHOWING MODAL!', {
-            requestId: requestData.id,
-            courier: requestData.selectedCourier,
-            vehicle: requestData.rideDetails?.vehicleType
-          });
-          
-          setIncomingRequest(requestData);
-          setShowRequestModal(true);
-        }
-      } catch (error) {
-        console.error('Error polling for ride requests:', error);
-      }
-    };
-    
-    // Check immediately when going online
-    if (isOnline && driver) {
-      checkForRideRequests();
-      
-      // Then check every 5 seconds while online
-      pollInterval = setInterval(checkForRideRequests, 5000);
-    }
-    
-    return () => {
-      if (pollInterval) clearInterval(pollInterval);
-    };
-  }, [isOnline, driver, showRequestModal]);
+  const [activeTab, setActiveTab] = useState("Home");
+  const [currentShipment, setCurrentShipment] = useState(null);
 
   useEffect(() => {
     fetchDriverData();
     return () => {
-      // Clean up listeners when component unmounts
-      if (rideRequestsListener) {
-        rideRequestsListener();
-      }
+      // Clean up the delivery request manager when component unmounts
+      DeliveryRequestManager.stopListening();
     };
   }, []);
 
-  // Toggle driver availability and listen for ride requests
+  // Handle new delivery request from the manager
+  const handleNewDeliveryRequest = (requestData) => {
+    console.log('🔔 New delivery request received in DriverHome:', requestData.id);
+    
+    // Only show modal if no modal is currently visible
+    if (!showRequestModal) {
+      setIncomingRequest(requestData);
+      setShowRequestModal(true);
+    } else {
+      console.log('📱 Modal already visible, skipping request:', requestData.id);
+    }
+  };
+
+  // Toggle driver availability and manage request listening
   useEffect(() => {
     if (!driver) return;
 
@@ -100,152 +62,65 @@ const DriverHome = () => {
       try {
         // If going online, request location permissions first
         if (isOnline) {
-          console.log('Driver going online - checking location permissions...');
+          console.log('🟢 Driver going online - checking permissions...');
           const hasPermission = await LocationService.requestPermissions();
           if (!hasPermission) {
-            // Don't go online if location permissions not granted
             Alert.alert(
               'Location Required', 
               'Location permission is required to go online and accept deliveries.',
               [{ text: 'OK' }]
             );
-            setIsOnline(false); // Reset the toggle
+            setIsOnline(false);
             return;
           }
         }
 
+        // Update driver status in Firebase
         const driverRef = doc(db, 'drivers', driver.id);
+        const updatedDriver = {
+          ...driver,
+          isOnline,
+          isAvailable: isOnline && !driver.currentRideId,
+          lastUpdated: serverTimestamp()
+        };
+
         await updateDoc(driverRef, {
           isOnline,
-          isAvailable: isOnline,
+          isAvailable: isOnline && !driver.currentRideId,
           lastUpdated: serverTimestamp()
         });
         
-        // Set up or remove the ride requests listener based on driver status
+        // Update local driver state
+        setDriver(updatedDriver);
+        
+        // Manage delivery request listening based on driver status
         if (isOnline) {
-          console.log('Driver is now online - setting up ride requests listener');
-          setupRideRequestsListener();
+          console.log('🔄 Driver is now online - starting request manager');
+          DeliveryRequestManager.initialize(updatedDriver, handleNewDeliveryRequest);
+          DeliveryRequestManager.startListening();
         } else {
-          console.log('Driver going offline - removing ride requests listener');
-          if (rideRequestsListener) {
-            rideRequestsListener();
-            setRideRequestsListener(null);
-          }
+          console.log('🔴 Driver going offline - stopping request manager');
+          DeliveryRequestManager.stopListening();
           // Stop any active location tracking
           if (LocationService.getTrackingStatus().isTracking) {
             LocationService.stopTracking();
           }
         }
       } catch (error) {
-        console.error('Error updating driver status:', error);
+        console.error('❌ Error updating driver status:', error);
         Alert.alert('Error', 'Failed to update your availability status');
       }
     };
 
     updateDriverStatus();
-  }, [isOnline, driver]);
+  }, [isOnline, driver?.id]);
 
-  // Set up a listener for new ride requests
-  const setupRideRequestsListener = () => {
-    if (!driver) return;
-
-    // Prevent duplicate listeners
-    if (rideRequestsListener) {
-      console.log('👥 Listener already exists, cleaning up first...');
-      rideRequestsListener();
-      setRideRequestsListener(null);
+  // Update delivery request manager when driver state changes
+  useEffect(() => {
+    if (driver && DeliveryRequestManager.getStatus().isListening) {
+      DeliveryRequestManager.updateDriver(driver);
     }
-
-    // Query for ride requests matching this driver's criteria
-    console.log('🔍 Setting up ride requests listener for driver:', { 
-      driverId: driver.id,
-      courierId: driver.courierId, 
-      vehicleType: driver.vehicleType,
-      fullDriverData: driver
-    });
-    
-    // First, let's listen to ALL ride requests to see what's available
-    const allRequestsQuery = query(
-      collection(db, 'rideRequests'),
-      where('status', '==', 'searching')
-    );
-
-    console.log('👀 Listening to ALL ride requests for debugging...');
-    
-    const unsubscribeAll = onSnapshot(allRequestsQuery, (querySnapshot) => {
-      console.log('📋 ALL REQUESTS CALLBACK FIRED! Count:', querySnapshot.docs.length);
-      querySnapshot.docs.forEach(doc => {
-        const data = doc.data();
-        console.log('📄 Request:', {
-          id: doc.id,
-          selectedCourier: data.selectedCourier,
-          vehicleType: data.rideDetails?.vehicleType,
-          status: data.status
-        });
-        
-        // Compare with driver data for debugging
-        console.log('🔍 Comparison for request', doc.id, ':', {
-          courierMatch: data.selectedCourier === driver.courierId,
-          vehicleMatch: data.rideDetails?.vehicleType === driver.vehicleType,
-          driverCourier: driver.courierId,
-          requestCourier: data.selectedCourier,
-          driverVehicle: driver.vehicleType,
-          requestVehicle: data.rideDetails?.vehicleType
-        });
-      });
-    }, (error) => {
-      console.error('❌ Error in all requests listener:', error);
-    });
-
-    // Now the specific query for this driver
-    const q = query(
-      collection(db, 'rideRequests'),
-      where('status', '==', 'searching'),
-      where('selectedCourier', '==', driver.courierId),
-      where('rideDetails.vehicleType', '==', driver.vehicleType)
-    );
-
-    console.log('🎯 Setting up SPECIFIC driver query...');
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      console.log('📨 Specific query results:', querySnapshot.docs.length);
-      
-      if (querySnapshot.docs.length > 0) {
-        // Found matching requests - process the first one
-        const doc = querySnapshot.docs[0];
-        const requestData = {
-          id: doc.id,
-          ...doc.data()
-        };
-        
-        console.log('📋 Found matching request:', {
-          requestId: requestData.id,
-          courier: requestData.selectedCourier,
-          vehicle: requestData.rideDetails?.vehicleType,
-          status: requestData.status
-        });
-        
-        console.log('🚨 SHOWING MODAL FOR REQUEST!', {
-          requestId: requestData.id,
-          courier: requestData.selectedCourier,
-          vehicle: requestData.rideDetails?.vehicleType
-        });
-        
-        // Show the delivery request modal
-        setIncomingRequest(requestData);
-        setShowRequestModal(true);
-      } else {
-        console.log('📭 No matching requests found for this driver');
-      }
-    }, (error) => {
-      console.error('❌ Error setting up ride requests listener:', error);
-    });
-
-    // Store both listeners for cleanup
-    setRideRequestsListener(() => {
-      unsubscribe();
-      unsubscribeAll();
-    });
-  };
+  }, [driver]);
 
   const fetchDriverData = async () => {
     setLoading(true);
@@ -253,7 +128,6 @@ const DriverHome = () => {
       const user = auth.currentUser;
       
       if (!user) {
-        // No user is signed in
         navigation.navigate('Login');
         return;
       }
@@ -268,34 +142,222 @@ const DriverHome = () => {
         setDriver(null);
       } else {
         const driverData = querySnapshot.docs[0].data();
-        setDriver({
+        const fullDriverData = {
           id: querySnapshot.docs[0].id,
           ...driverData
-        });
+        };
+        setDriver(fullDriverData);
         
         // Set online status based on stored value
         setIsOnline(driverData.isOnline || false);
         
-        // For demo, creating sample tracking history
-        setTrackingHistory([
-          { id: "EX123456", item: "JBL Earbuds", from: "Panadura", to: "Colombo", status: "In Transit", image: require("../assets/icon/package.png") },
-          { id: "EX789012", item: "Laptop", from: "Galle", to: "Kandy", status: "Delivered", image: require("../assets/icon/package.png") },
-        ]);
+        // Fetch real tracking history for this driver
+        await fetchDriverDeliveryHistory(fullDriverData.id);
       }
     } catch (error) {
-      console.error('Error fetching driver data:', error);
+      console.error('❌ Error fetching driver data:', error);
       Alert.alert('Error', 'Failed to load your profile data');
     } finally {
       setLoading(false);
     }
   };
 
+  // Fetch driver's delivery history from Firebase
+  const fetchDriverDeliveryHistory = async (driverId) => {
+    try {
+      console.log('📊 Fetching delivery history for driver:', driverId);
+      
+      // Query for completed and accepted deliveries for this driver
+      const deliveriesQuery = query(
+        collection(db, 'rideRequests'),
+        where('driverId', '==', driverId)
+      );
+      
+      const querySnapshot = await getDocs(deliveriesQuery);
+      const deliveries = [];
+      
+      querySnapshot.forEach(doc => {
+        const data = doc.data();
+        deliveries.push({
+          id: doc.id,
+          ...data,
+          item: data.packageDetails?.packageName || 'Package',
+          from: data.packageDetails?.pickupLocation || 'Unknown',
+          to: data.packageDetails?.dropoffLocation || 'Unknown',
+          trackingId: data.packageDetails?.trackingId || doc.id.substring(0, 8),
+          status: getDeliveryStatusLabel(data.status),
+          image: require("../assets/icon/package.png"),
+          timestamp: data.acceptedAt || data.createdAt
+        });
+      });
+      
+      // Sort by timestamp (most recent first)
+      deliveries.sort((a, b) => {
+        const timeA = a.timestamp?.toMillis() || 0;
+        const timeB = b.timestamp?.toMillis() || 0;
+        return timeB - timeA;
+      });
+      
+      // Take only the last 5 deliveries for history
+      setTrackingHistory(deliveries.slice(0, 5));
+      
+      console.log('✅ Loaded', deliveries.length, 'delivery records');
+      
+    } catch (error) {
+      console.error('❌ Error fetching delivery history:', error);
+      // Set empty array on error
+      setTrackingHistory([]);
+    }
+  };
+
+  // Helper function to get user-friendly status labels
+  const getDeliveryStatusLabel = (status) => {
+    switch (status) {
+      case 'searching':
+        return 'Searching for Driver';
+      case 'accepted':
+        return 'In Transit';
+      case 'completed':
+        return 'Delivered';
+      case 'cancelled':
+        return 'Cancelled';
+      default:
+        return 'Unknown';
+    }
+  };
+
+  // Fetch current active shipment details with validation
+  const getCurrentShipment = async () => {
+    if (!driver || !driver.currentRideId) {
+      return null;
+    }
+
+    try {
+      // First, try to find the current ride in tracking history
+      const currentRide = trackingHistory.find(item => item.id === driver.currentRideId);
+      
+      if (currentRide) {
+        return {
+          item: currentRide.item,
+          trackingId: currentRide.trackingId,
+          from: currentRide.from,
+          to: currentRide.to,
+          status: 'In Transit',
+          rideData: {
+            id: currentRide.id,
+            ...currentRide
+          }
+        };
+      }
+
+      // If not found in history, check if the ride request actually exists in the database
+      console.log('🔍 Checking if current ride request exists:', driver.currentRideId);
+      const requestQuery = query(
+        collection(db, 'rideRequests'),
+        where('__name__', '==', driver.currentRideId)
+      );
+      
+      const requestSnapshot = await getDocs(requestQuery);
+      
+      if (requestSnapshot.empty) {
+        // The ride request doesn't exist anymore, clear the currentRideId
+        console.log('🚫 Current ride request not found in database, clearing currentRideId');
+        const driverRef = doc(db, 'drivers', driver.id);
+        await updateDoc(driverRef, {
+          currentRideId: null,
+          isAvailable: true,
+          updatedAt: serverTimestamp()
+        });
+        
+        // Update local state
+        setDriver(prevDriver => ({
+          ...prevDriver,
+          currentRideId: null,
+          isAvailable: true
+        }));
+        
+        return null;
+      }
+
+      // If the request exists but not in history yet, return the real data
+      const requestData = requestSnapshot.docs[0].data();
+      
+      // Validate that this request is actually assigned to this driver and still active
+      if (requestData.driverId !== driver.id || !['accepted', 'searching'].includes(requestData.status)) {
+        console.log('🚫 Ride request is not assigned to this driver or not active, clearing currentRideId');
+        const driverRef = doc(db, 'drivers', driver.id);
+        await updateDoc(driverRef, {
+          currentRideId: null,
+          isAvailable: true,
+          updatedAt: serverTimestamp()
+        });
+        
+        setDriver(prevDriver => ({
+          ...prevDriver,
+          currentRideId: null,
+          isAvailable: true
+        }));
+        
+        return null;
+      }
+
+      return {
+        item: requestData.packageDetails?.packageName || 'Package',
+        trackingId: requestData.packageDetails?.trackingId || driver.currentRideId.substring(0, 8),
+        from: requestData.packageDetails?.pickupLocation || 'Pickup Location',
+        to: requestData.packageDetails?.dropoffLocation || 'Delivery Location',
+        status: 'In Transit',
+        rideData: {
+          id: driver.currentRideId,
+          ...requestData
+        }
+      };
+    } catch (error) {
+      console.error('❌ Error checking current ride request:', error);
+      // On error, clear the currentRideId to avoid showing invalid data
+      try {
+        const driverRef = doc(db, 'drivers', driver.id);
+        await updateDoc(driverRef, {
+          currentRideId: null,
+          isAvailable: true,
+          updatedAt: serverTimestamp()
+        });
+        
+        setDriver(prevDriver => ({
+          ...prevDriver,
+          currentRideId: null,
+          isAvailable: true
+        }));
+      } catch (updateError) {
+        console.error('❌ Error clearing currentRideId:', updateError);
+      }
+      
+      return null;
+    }
+  };
+
+  // Update current shipment when driver or tracking history changes
+  useEffect(() => {
+    const updateCurrentShipment = async () => {
+      if (driver) {
+        const shipment = await getCurrentShipment();
+        setCurrentShipment(shipment);
+      } else {
+        setCurrentShipment(null);
+      }
+    };
+
+    updateCurrentShipment();
+  }, [driver, trackingHistory]);
+
   const handleLogout = async () => {
     try {
+      // Stop listening for requests before logout
+      DeliveryRequestManager.stopListening();
       await signOut(auth);
       navigation.navigate('Login');
     } catch (error) {
-      console.error('Error signing out:', error);
+      console.error('❌ Error signing out:', error);
       Alert.alert('Error', 'Failed to sign out');
     }
   };
@@ -308,7 +370,26 @@ const DriverHome = () => {
     if (!incomingRequest) return;
     
     try {
-      // Update the ride request status
+      console.log('🤝 Driver accepting request:', incomingRequest.id);
+      
+      // Mark request as accepted in the manager first
+      DeliveryRequestManager.markRequestAccepted(incomingRequest.id);
+      
+      // Check if the request is still available (not already accepted by another driver)
+      const requestSnapshot = await getDocs(query(
+        collection(db, 'rideRequests'),
+        where('__name__', '==', incomingRequest.id),
+        where('status', '==', 'searching')
+      ));
+      
+      if (requestSnapshot.empty) {
+        Alert.alert('Request Unavailable', 'This delivery request has already been accepted by another driver.');
+        setShowRequestModal(false);
+        setIncomingRequest(null);
+        return;
+      }
+      
+      // Update the ride request status to accepted
       const requestRef = doc(db, 'rideRequests', incomingRequest.id);
       await updateDoc(requestRef, {
         status: 'accepted',
@@ -320,27 +401,46 @@ const DriverHome = () => {
         updatedAt: serverTimestamp()
       });
       
-      // Update driver availability
+      // Update driver availability - mark as busy with current ride
       const driverRef = doc(db, 'drivers', driver.id);
-      await updateDoc(driverRef, {
+      const updatedDriverData = {
         isAvailable: false,
         currentRideId: incomingRequest.id,
+        lastRideAcceptedAt: serverTimestamp(),
         updatedAt: serverTimestamp()
-      });
+      };
+      
+      await updateDoc(driverRef, updatedDriverData);
+      
+      // Update local driver state
+      const newDriverState = {
+        ...driver,
+        isAvailable: false,
+        currentRideId: incomingRequest.id
+      };
+      setDriver(newDriverState);
+      
+      // Update the delivery request manager with new driver state
+      DeliveryRequestManager.updateDriver(newDriverState);
       
       // Start location tracking for real-time driver tracking
-      console.log('Starting location tracking for accepted trip');
+      console.log('🗺️ Starting location tracking for accepted trip');
       await LocationService.startTracking(incomingRequest.id, driver.id);
       
-      // Navigate to the delivery details screen
-      navigation.navigate('OrderPreview', { rideRequest: incomingRequest });
-      
-      // Close the modal
+      // Close the modal first
       setShowRequestModal(false);
       setIncomingRequest(null);
+      
+      // Navigate to the delivery details screen
+      setTimeout(() => {
+        navigation.navigate('OrderPreview', { rideRequest: incomingRequest });
+      }, 500);
+      
+      console.log('✅ Request accepted successfully:', incomingRequest.id);
+      
     } catch (error) {
-      console.error('Error accepting ride request:', error);
-      Alert.alert('Error', 'Failed to accept the delivery request');
+      console.error('❌ Error accepting ride request:', error);
+      Alert.alert('Error', 'Failed to accept the delivery request. Please try again.');
     }
   };
 
@@ -348,24 +448,38 @@ const DriverHome = () => {
     if (!incomingRequest) return;
     
     try {
+      console.log('❌ Driver declining request:', incomingRequest.id);
+      
+      // Mark request as declined in the manager first
+      DeliveryRequestManager.markRequestDeclined(incomingRequest.id);
+      
       // Update the ride request with decline info
       const requestRef = doc(db, 'rideRequests', incomingRequest.id);
       await updateDoc(requestRef, {
-        declinedDrivers: [
-          ...(incomingRequest.declinedDrivers || []),
-          {
-            driverId: driver.id,
-            declinedAt: serverTimestamp()
-          }
-        ],
+        declinedDrivers: arrayUnion({
+          driverId: driver.id,
+          driverName: driver.fullName,
+          declinedAt: serverTimestamp()
+        }),
         updatedAt: serverTimestamp()
       });
       
-      // Close the modal
+      // Update driver's last decline time for rate limiting
+      const driverRef = doc(db, 'drivers', driver.id);
+      await updateDoc(driverRef, {
+        lastDeclineAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      
+      // Close the modal and clear the request
       setShowRequestModal(false);
       setIncomingRequest(null);
+      
+      console.log('✅ Request declined successfully:', incomingRequest.id);
+      
     } catch (error) {
-      console.error('Error declining ride request:', error);
+      console.error('❌ Error declining ride request:', error);
+      Alert.alert('Error', 'Failed to decline the request. Please try again.');
     }
   };
 
@@ -593,56 +707,169 @@ const DriverHome = () => {
               <Text className="text-lg font-semibold mb-4" style={{ fontSize: wp("4.5%") }}>
                 Current Shipment
               </Text>
-              <View className="bg-white rounded-xl p-4 shadow-sm">
-                <View className="flex-row items-center mb-4">
-                  <View
-                    className="bg-gray-200 rounded-full"
-                    style={{
-                      width: wp("14%"),
-                      height: wp("14%"),
-                      justifyContent: "center",
-                      alignItems: "center",
-                    }}
-                  >
-                    <Image
-                      source={require("../assets/icon/package.png")}
-                      style={{ width: 35, height: 35 }}
-                      resizeMode="contain"
-                    />
-                  </View>
-                  <View className="ml-4">
-                    <Text className="font-semibold text-base" style={{ fontSize: wp("4%") }}>
-                      JBL Earbuds
-                    </Text>
-                    <Text className="text-gray-500 text-sm" style={{ fontSize: wp("3.5%") }}>
-                      #Tracking ID: EX123456
-                    </Text>
-                  </View>
-                </View>
-                <Text className="text-gray-600" style={{ fontSize: wp("3.8%") }}>
-                  <Text className="font-semibold">From: </Text>20/6, Panadura
-                </Text>
-                <Text className="text-gray-600 mb-2" style={{ fontSize: wp("3.8%") }}>
-                  <Text className="font-semibold">Shipping to: </Text>20/6, Panadura
-                </Text>
-                <Text className="text-blue-600 font-medium" style={{ fontSize: wp("4%") }}>
-                  Status: Your Package is in transit
-                </Text>
-              </View>
+              {(() => {
+                if (currentShipment) {
+                  return (
+                    <View className="bg-white rounded-xl p-4 shadow-sm">
+                      <View className="flex-row items-center mb-4">
+                        <View
+                          className="bg-blue-100 rounded-full"
+                          style={{
+                            width: wp("14%"),
+                            height: wp("14%"),
+                            justifyContent: "center",
+                            alignItems: "center",
+                          }}
+                        >
+                          <Image
+                            source={require("../assets/icon/package.png")}
+                            style={{ width: 35, height: 35, tintColor: "#1E40AF" }}
+                            resizeMode="contain"
+                          />
+                        </View>
+                        <View className="ml-4 flex-1">
+                          <Text className="font-semibold text-base" style={{ fontSize: wp("4%") }}>
+                            {currentShipment.item}
+                          </Text>
+                          <Text className="text-gray-500 text-sm" style={{ fontSize: wp("3.5%") }}>
+                            #Tracking ID: {currentShipment.trackingId}
+                          </Text>
+                        </View>
+                        <TouchableOpacity 
+                          className="bg-blue-600 px-3 py-2 rounded-lg"
+                          onPress={() => navigation.navigate('OrderPreview', { 
+                            rideRequest: currentShipment.rideData 
+                          })}
+                        >
+                          <Text className="text-white text-sm font-medium">View</Text>
+                        </TouchableOpacity>
+                      </View>
+                      <Text className="text-gray-600" style={{ fontSize: wp("3.8%") }}>
+                        <Text className="font-semibold">From: </Text>
+                        {currentShipment.from.length > 30 ? 
+                          `${currentShipment.from.substring(0, 30)}...` : 
+                          currentShipment.from}
+                      </Text>
+                      <Text className="text-gray-600 mb-2" style={{ fontSize: wp("3.8%") }}>
+                        <Text className="font-semibold">To: </Text>
+                        {currentShipment.to.length > 30 ? 
+                          `${currentShipment.to.substring(0, 30)}...` : 
+                          currentShipment.to}
+                      </Text>
+                      <View className="flex-row justify-between items-center">
+                        <Text className="text-blue-600 font-medium" style={{ fontSize: wp("4%") }}>
+                          Status: {currentShipment.status}
+                        </Text>
+                        <TouchableOpacity 
+                          className="bg-red-100 px-3 py-1 rounded-lg"
+                          onPress={() => navigation.navigate('OrderPreview', { 
+                            rideRequest: currentShipment.rideData 
+                          })}
+                        >
+                          <Text className="text-red-600 text-xs font-medium">Cancel</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  );
+                } else {
+                  return (
+                    <View className="bg-gray-50 rounded-xl p-4 shadow-sm">
+                      <View className="flex-row items-center mb-2">
+                        <View
+                          className="bg-gray-200 rounded-full"
+                          style={{
+                            width: wp("14%"),
+                            height: wp("14%"),
+                            justifyContent: "center",
+                            alignItems: "center",
+                          }}
+                        >
+                          <Image
+                            source={require("../assets/icon/package.png")}
+                            style={{ width: 35, height: 35, tintColor: "#9CA3AF" }}
+                            resizeMode="contain"
+                          />
+                        </View>
+                        <View className="ml-4">
+                          <Text className="font-semibold text-base text-gray-600" style={{ fontSize: wp("4%") }}>
+                            No Active Deliveries
+                          </Text>
+                          <Text className="text-gray-500 text-sm" style={{ fontSize: wp("3.5%") }}>
+                            You're available for new deliveries
+                          </Text>
+                        </View>
+                      </View>
+                      <Text className="text-gray-500 text-center mt-2" style={{ fontSize: wp("3.8%") }}>
+                        {isOnline ? 
+                          'Waiting for delivery requests...' : 
+                          'Go online to start receiving delivery requests'
+                        }
+                      </Text>
+                    </View>
+                  );
+                }
+              })()}
             </View>
 
             {/* Tracking History */}
             <View className="px-6 mt-8">
-              <Text className="text-lg font-semibold mb-4" style={{ fontSize: wp("4.5%") }}>Tracking History</Text>
-              {trackingHistory.map((item, index) => (
-                <TouchableOpacity key={index} className="bg-white rounded-xl p-4 shadow-sm mb-4 flex-row items-center">
-                  <Image source={item.image} style={{ width: 25, height: 25, marginRight: 10 }} resizeMode="contain" />
-                  <View>
-                    <Text className="font-semibold text-base">{item.item}</Text>
-                    <Text className="text-gray-500 text-sm">#Tracking ID: {item.id}</Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
+              <Text className="text-lg font-semibold mb-4" style={{ fontSize: wp("4.5%") }}>
+                Recent Deliveries
+              </Text>
+              {trackingHistory.length > 0 ? (
+                trackingHistory.map((item, index) => (
+                  <TouchableOpacity 
+                    key={item.id} 
+                    className="bg-white rounded-xl p-4 shadow-sm mb-4 flex-row items-center"
+                    onPress={() => {
+                      // Navigate to delivery details if it's current active delivery
+                      if (driver.currentRideId === item.id) {
+                        navigation.navigate('OrderPreview', { rideRequest: item });
+                      }
+                    }}
+                  >
+                    <View className="bg-gray-100 rounded-full p-2 mr-3">
+                      <Image 
+                        source={item.image} 
+                        style={{ width: 25, height: 25 }} 
+                        resizeMode="contain" 
+                      />
+                    </View>
+                    <View className="flex-1">
+                      <Text className="font-semibold text-base">{item.item}</Text>
+                      <Text className="text-gray-500 text-sm">#{item.trackingId}</Text>
+                      <Text className="text-gray-400 text-xs">
+                        {item.from.substring(0, 20)}... → {item.to.substring(0, 20)}...
+                      </Text>
+                    </View>
+                    <View className="items-end">
+                      <View className={`px-2 py-1 rounded-full ${
+                        item.status === 'Delivered' ? 'bg-green-100' : 
+                        item.status === 'In Transit' ? 'bg-blue-100' : 'bg-gray-100'
+                      }`}>
+                        <Text className={`text-xs font-medium ${
+                          item.status === 'Delivered' ? 'text-green-800' : 
+                          item.status === 'In Transit' ? 'text-blue-800' : 'text-gray-800'
+                        }`}>
+                          {item.status}
+                        </Text>
+                      </View>
+                      {driver.currentRideId === item.id && (
+                        <Text className="text-blue-600 text-xs mt-1 font-medium">Active</Text>
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                ))
+              ) : (
+                <View className="bg-gray-50 rounded-xl p-4 shadow-sm">
+                  <Text className="text-gray-500 text-center">
+                    No delivery history yet
+                  </Text>
+                  <Text className="text-gray-400 text-center text-sm mt-1">
+                    Complete your first delivery to see it here
+                  </Text>
+                </View>
+              )}
             </View>
           </>
         )}

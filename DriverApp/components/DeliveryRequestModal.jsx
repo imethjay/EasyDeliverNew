@@ -4,18 +4,20 @@ import Icon from 'react-native-vector-icons/Feather'; // You can change the icon
 import { formatCurrency } from '../utils/helpers';
 
 const DeliveryRequestModal = ({ visible, rideRequest, onAccept, onDecline }) => {
-    const [timeLeft, setTimeLeft] = useState(45); // 45 seconds
+    const [timeLeft, setTimeLeft] = useState(60); // 60 seconds for better UX
     const { packageDetails, courierDetails, rideDetails, distance, duration } = rideRequest || {};
 
     useEffect(() => {
         if (!visible) return;
 
-        setTimeLeft(45); // Reset on open
+        setTimeLeft(60); // Reset to 60 seconds on open
+        console.log('📱 Delivery request modal opened - 60 seconds to respond');
 
         const interval = setInterval(() => {
             setTimeLeft((prev) => {
                 if (prev <= 1) {
                     clearInterval(interval);
+                    console.log('⏰ Request timed out - auto declining');
                     onDecline(); // Auto-decline on timeout
                     return 0;
                 }
@@ -24,9 +26,9 @@ const DeliveryRequestModal = ({ visible, rideRequest, onAccept, onDecline }) => 
         }, 1000);
 
         return () => clearInterval(interval);
-    }, [visible]);
+    }, [visible, onDecline]);
 
-    const formatTime = (sec) => `0:${sec < 10 ? '0' : ''}${sec}`;
+    const formatTime = (sec) => `${Math.floor(sec / 60)}:${(sec % 60) < 10 ? '0' : ''}${sec % 60}`;
 
     if (!rideRequest) return null;
 
@@ -40,13 +42,20 @@ const DeliveryRequestModal = ({ visible, rideRequest, onAccept, onDecline }) => 
             baseRate = rideDetails.price * 0.8;
         } else {
             // Fallback calculation if price is not provided
-            baseRate = (distance || 5) * 100; // 100 per km
+            baseRate = (distance || 5) * 150; // 150 LKR per km base rate
         }
         
         return baseRate;
     };
 
     const earnings = calculateEarnings();
+
+    // Timer color based on urgency
+    const getTimerColor = () => {
+        if (timeLeft <= 10) return '#EF4444'; // Red - urgent
+        if (timeLeft <= 20) return '#F59E0B'; // Amber - warning
+        return '#3B82F6'; // Blue - normal
+    };
 
     return (
         <Modal
@@ -56,14 +65,24 @@ const DeliveryRequestModal = ({ visible, rideRequest, onAccept, onDecline }) => 
             onRequestClose={onDecline}
         >
             <View className="flex-1 justify-center bg-black/50 px-5">
-                <View className="bg-gray-100 rounded-xl p-6">
+                <View className="bg-white rounded-xl p-6 border-2 border-blue-500">
+                    {/* New Delivery Request Header */}
+                    <View className="mb-4">
+                        <Text className="text-xl font-bold text-center text-gray-900">🚚 New Delivery Request</Text>
+                        <Text className="text-center text-gray-500 text-sm mt-1">
+                            A customer needs a delivery in your area
+                        </Text>
+                    </View>
 
                     {/* Timer */}
-                    <View className="flex-row justify-between items-center mb-6">
-                        <Text className="text-blue-800 font-extrabold text-sm flex-row items-center">
-                            <Icon name="clock" size={14} /> {' '}Time to respond:
+                    <View className="flex-row justify-between items-center mb-6 bg-gray-50 rounded-lg p-3">
+                        <Text className="font-semibold text-gray-700 flex-row items-center">
+                            <Icon name="clock" size={16} /> Time to respond:
                         </Text>
-                        <Text className="font-bold text-blue-800 text-base">
+                        <Text 
+                            className="font-bold text-lg"
+                            style={{ color: getTimerColor() }}
+                        >
                             {formatTime(timeLeft)}
                         </Text>
                     </View>
@@ -71,15 +90,15 @@ const DeliveryRequestModal = ({ visible, rideRequest, onAccept, onDecline }) => 
                     {/* Locations */}
                     <View className="mb-6">
                         <View className="mb-4">
-                            <Text className="text-gray-500 text-sm mb-1">Pickup Location</Text>
-                            <Text className="font-bold text-gray-900 text-base">
-                                <Icon name="map-pin" size={14} /> {packageDetails?.pickupLocation || 'Unknown location'}
+                            <Text className="text-gray-500 text-sm mb-1">📍 Pickup Location</Text>
+                            <Text className="font-semibold text-gray-900 text-base">
+                                {packageDetails?.pickupLocation || 'Unknown location'}
                             </Text>
                         </View>
                         <View>
-                            <Text className="text-gray-500 text-sm mb-1">Drop-off Location</Text>
-                            <Text className="font-bold text-gray-900 text-base">
-                                <Icon name="map-pin" size={14} /> {packageDetails?.dropoffLocation || 'Unknown location'}
+                            <Text className="text-gray-500 text-sm mb-1">🎯 Drop-off Location</Text>
+                            <Text className="font-semibold text-gray-900 text-base">
+                                {packageDetails?.dropoffLocation || 'Unknown location'}
                             </Text>
                         </View>
                     </View>
