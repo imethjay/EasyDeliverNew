@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { View, Text, TextInput, FlatList, TouchableOpacity, Image } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useNavigation } from "@react-navigation/native";
 
 const chatData = Array(6).fill({
     name: "Imeth Jayarathne",
@@ -9,7 +10,8 @@ const chatData = Array(6).fill({
     avatar: "https://randomuser.me/api/portraits/men/1.jpg",
 });
 
-const ChatList = ({ navigation }) => {
+const ChatList = () => {
+    const navigation = useNavigation();
     const [activeTab, setActiveTab] = useState("Notifications"); // Default selected tab
 
     const menuItems = [
@@ -18,11 +20,34 @@ const ChatList = ({ navigation }) => {
         { icon: require("../assets/icon/chat.png"), label: "Notifications", screen: "Notifications" },
         { icon: require("../assets/icon/profile.png"), label: "Account", screen: "Account" },
     ];
+
+    // Handle navigation for bottom nav items
+    const handleNavigation = (screenName) => {
+        setActiveTab(screenName);
+        
+        switch (screenName) {
+        case "Home":
+            navigation.navigate("DriverHome");
+            break;
+        case "Delivery":
+            navigation.navigate("MyOrder");
+            break;
+        case "Notifications":
+            // Already on notifications page, do nothing
+            break;
+        case "Account":
+            navigation.navigate("Profile");
+            break;
+        default:
+            break;
+        }
+    };
+
     return (
         <View className="flex-1 w-full bg-white p-4">
             {/* Header */}
             <View className="flex-row items-center  mb-4">
-                <TouchableOpacity className="rounded-full p-2 border-2 border-gray-200">
+                <TouchableOpacity className="rounded-full p-2 border-2 border-gray-200" onPress={() => navigation.navigate("DriverHome")}>
                     <Ionicons name="arrow-back" size={20} color="black" />
                 </TouchableOpacity>
                 <Text className="flex-1 text-center text-lg font-extrabold">Chat</Text>
@@ -66,7 +91,7 @@ const ChatList = ({ navigation }) => {
                     <TouchableOpacity
                         key={index}
                         className="items-center"
-                        onPress={() => setActiveTab(item.screen)}
+                        onPress={() => handleNavigation(item.screen)}
                     >
                         <Image
                             source={item.icon}

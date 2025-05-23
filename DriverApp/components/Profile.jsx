@@ -1,8 +1,10 @@
 import React, { useState } from "react";
 import { View, Text, Image, ScrollView, TouchableOpacity } from "react-native";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
+import { useNavigation } from "@react-navigation/native";
 
 const Profile = () => {
+    const navigation = useNavigation();
     const [activeTab, setActiveTab] = useState("Account"); // Default selected tab
 
     const menuItems = [
@@ -11,11 +13,34 @@ const Profile = () => {
         { icon: require("../assets/icon/chat.png"), label: "Notifications", screen: "Notifications" },
         { icon: require("../assets/icon/profile.png"), label: "Account", screen: "Account" },
     ];
+
+    // Handle navigation for bottom nav items
+    const handleNavigation = (screenName) => {
+        setActiveTab(screenName);
+        
+        switch (screenName) {
+        case "Home":
+            navigation.navigate("DriverHome");
+            break;
+        case "Delivery":
+            navigation.navigate("MyOrder");
+            break;
+        case "Notifications":
+            navigation.navigate("ChatList");
+            break;
+        case "Account":
+            // Already on account page, do nothing
+            break;
+        default:
+            break;
+        }
+    };
+
     return (
         <View className="flex-1 w-full bg-white p-4">
             {/* Header */}
             <View className="flex-row items-center justify-between mb-6">
-                <TouchableOpacity className="rounded-full p-2 border border-gray-300">
+                <TouchableOpacity className="rounded-full p-2 border border-gray-300" onPress={() => navigation.navigate("DriverHome")}>
                     <Ionicons name="arrow-back" size={20} color="black" />
                 </TouchableOpacity>
                 <Text className="text-lg font-bold text-center flex-1 ml-[-32px]">
@@ -133,7 +158,7 @@ const Profile = () => {
                     <TouchableOpacity
                         key={index}
                         className="items-center"
-                        onPress={() => setActiveTab(item.screen)}
+                        onPress={() => handleNavigation(item.screen)}
                     >
                         <Image
                             source={item.icon}

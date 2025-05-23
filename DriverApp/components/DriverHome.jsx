@@ -30,6 +30,7 @@ const DriverHome = () => {
   const [incomingRequest, setIncomingRequest] = useState(null);
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [rideRequestsListener, setRideRequestsListener] = useState(null);
+  const [activeTab, setActiveTab] = useState("Home"); // Default selected tab
 
   // Poll for ride requests periodically when online
   useEffect(() => {
@@ -368,14 +369,34 @@ const DriverHome = () => {
     }
   };
 
-  const [activeTab, setActiveTab] = useState("Home"); // Default selected tab
-  
   const menuItems = [
     { icon: require("../assets/icon/home.png"), label: "Home", screen: "Home" },
     { icon: require("../assets/icon/orders.png"), label: "Delivery", screen: "Delivery" },
     { icon: require("../assets/icon/chat.png"), label: "Notifications", screen: "Notifications" },
     { icon: require("../assets/icon/profile.png"), label: "Account", screen: "Account" },
   ];
+
+  // Handle navigation for bottom nav items
+  const handleNavigation = (screenName) => {
+    setActiveTab(screenName);
+    
+    switch (screenName) {
+      case "Home":
+        // Already on home, do nothing
+        break;
+      case "Delivery":
+        navigation.navigate("MyOrder");
+        break;
+      case "Notifications":
+        navigation.navigate("ChatList");
+        break;
+      case "Account":
+        navigation.navigate("Profile");
+        break;
+      default:
+        break;
+    }
+  };
 
   if (loading) {
     return (
@@ -517,7 +538,7 @@ const DriverHome = () => {
 
         {/* Action Buttons */}
         <View className="flex-row justify-around mt-6">
-          <TouchableOpacity className="items-center">
+          <TouchableOpacity className="items-center" onPress={() => navigation.navigate("MyOrder")}>
             <View
               className="p-4"
               style={{
@@ -529,12 +550,18 @@ const DriverHome = () => {
                 alignItems: "center",
               }}
             >
+              <Image
+                source={require("../assets/icon/orders.png")}
+                style={{ width: 30, height: 30, tintColor: "white" }}
+                resizeMode="contain"
+              />
             </View>
             <Text className="mt-2 text-base font-medium" style={{ fontSize: wp("4%") }}>
+              My Orders
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity className="items-center">
+          <TouchableOpacity className="items-center" onPress={() => navigation.navigate("StatsPage")}>
             <View
               className="p-4"
               style={{
@@ -546,6 +573,11 @@ const DriverHome = () => {
                 alignItems: "center",
               }}
             >
+              <Image
+                source={require("../assets/icon/history.png")}
+                style={{ width: 30, height: 30, tintColor: "white" }}
+                resizeMode="contain"
+              />
             </View>
             <Text className="mt-2 text-base font-medium" style={{ fontSize: wp("4%") }}>
               Stats
@@ -654,7 +686,7 @@ const DriverHome = () => {
           <TouchableOpacity
             key={index}
             className="items-center"
-            onPress={() => setActiveTab(item.screen)}
+            onPress={() => handleNavigation(item.screen)}
           >
             <Image
               source={item.icon}

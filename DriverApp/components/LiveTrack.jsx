@@ -3,8 +3,10 @@ import { View, Text, Image, TouchableOpacity, Dimensions, ScrollView } from "rea
 import MapView, { Marker } from "react-native-maps";
 import { Ionicons, FontAwesome } from "@expo/vector-icons";
 import * as Location from "expo-location";
+import { useNavigation } from "@react-navigation/native";
 
 const LiveTrack = () => {
+    const navigation = useNavigation();
     const [region, setRegion] = useState(null);
 
     useEffect(() => {
@@ -36,7 +38,7 @@ const LiveTrack = () => {
                         initialRegion={region}
                     >
                         <View className="flex-row items-center p-4 mb-4">
-                            <TouchableOpacity className="rounded-full p-2 border-2 border-gray-200">
+                            <TouchableOpacity className="rounded-full p-2 border-2 border-gray-200" onPress={() => navigation.navigate("DriverHome")}>
                                 <Ionicons name="arrow-back" size={20} color="black" />
                             </TouchableOpacity>
                             <Text className="flex-1 text-center text-lg font-extrabold">Live Tracking </Text>

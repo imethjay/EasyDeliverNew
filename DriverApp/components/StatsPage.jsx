@@ -2,11 +2,12 @@ import React, { useState } from "react";
 import { View, Text, ScrollView, Dimensions, TouchableOpacity, Image } from 'react-native';
 import { widthPercentageToDP as wp, heightPercentageToDP as hp } from 'react-native-responsive-screen';
 import { LineChart } from 'react-native-chart-kit';
-
+import { useNavigation } from "@react-navigation/native";
+import { Ionicons } from "@expo/vector-icons";
 
 const StatsPage = () => {
+    const navigation = useNavigation();
     const screenWidth = Dimensions.get('window').width;
-
     const [activeTab, setActiveTab] = useState("Home"); // Default selected tab
 
     const menuItems = [
@@ -16,11 +17,40 @@ const StatsPage = () => {
         { icon: require("../assets/icon/profile.png"), label: "Account", screen: "Account" },
     ];
 
+    // Handle navigation for bottom nav items
+    const handleNavigation = (screenName) => {
+        setActiveTab(screenName);
+        
+        switch (screenName) {
+        case "Home":
+            navigation.navigate("DriverHome");
+            break;
+        case "Delivery":
+            navigation.navigate("MyOrder");
+            break;
+        case "Notifications":
+            navigation.navigate("ChatList");
+            break;
+        case "Account":
+            navigation.navigate("Profile");
+            break;
+        default:
+            break;
+        }
+    };
+
     return (
         <View className="flex-1 w-full bg-white p-4">
             {/* Header */}
-            <Text className="text-xl font-bold mb-1">Statistics</Text>
-            <Text className="text-gray-500 text-base mb-4">Overview of your performance</Text>
+            <View className="flex-row items-center mb-4">
+                <TouchableOpacity onPress={() => navigation.navigate("DriverHome")} className="mr-4">
+                    <Ionicons name="arrow-back" size={24} color="black" />
+                </TouchableOpacity>
+                <View>
+                    <Text className="text-xl font-bold mb-1">Statistics</Text>
+                    <Text className="text-gray-500 text-base mb-4">Overview of your performance</Text>
+                </View>
+            </View>
 
             {/* Cards */}
             <View className="flex-row justify-between mb-4">
@@ -91,7 +121,7 @@ const StatsPage = () => {
                     <TouchableOpacity
                         key={index}
                         className="items-center"
-                        onPress={() => setActiveTab(item.screen)}
+                        onPress={() => handleNavigation(item.screen)}
                     >
                         <Image
                             source={item.icon}

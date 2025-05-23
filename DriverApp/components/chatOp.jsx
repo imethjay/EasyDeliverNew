@@ -10,6 +10,7 @@ import {
     Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useNavigation } from "@react-navigation/native";
 
 const suggestions = [
     "Assistance for your delivery needs!",
@@ -18,7 +19,8 @@ const suggestions = [
     "Assistance for your delivery needs!",
 ];
 
-const ChatScreen = ({ navigation }) => {
+const ChatScreen = () => {
+    const navigation = useNavigation();
     const [message, setMessage] = useState("");
     const [messages, setMessages] = useState([]);
 
@@ -36,7 +38,7 @@ const ChatScreen = ({ navigation }) => {
         >
             {/* Header */}
             <View className="flex-row w-full items-center  mb-4">
-                <TouchableOpacity className="rounded-full p-2 border-2 border-gray-200">
+                <TouchableOpacity className="rounded-full p-2 border-2 border-gray-200" onPress={() => navigation.navigate("DriverHome")}>
                     <Ionicons name="arrow-back" size={20} color="black" />
                 </TouchableOpacity>
                 <Text className="flex-1 text-center text-lg font-extrabold">Chat</Text>

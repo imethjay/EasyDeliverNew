@@ -3,13 +3,16 @@ import { View, Text, TouchableOpacity, Image } from "react-native";
 import { FontAwesome, Ionicons } from "@expo/vector-icons";
 import MapView, { Marker } from "react-native-maps";
 import { ScrollView } from "react-native";
+import { useNavigation } from "@react-navigation/native";
 
 const OrderPreview = () => {
+  const navigation = useNavigation();
+  
   return (
     <View className="flex-1 w-full bg-white p-4">
       {/* Header */}
       <View className="flex-row items-center mb-6">
-        <TouchableOpacity className="rounded-full p-2 border-2 border-gray-200">
+        <TouchableOpacity className="rounded-full p-2 border-2 border-gray-200" onPress={() => navigation.navigate("DriverHome")}>
           <Ionicons name="arrow-back" size={20} color="black" />
         </TouchableOpacity>
         <Text className="flex-1 text-lg font-bold ml-2 text-center">Tracking Details</Text>
