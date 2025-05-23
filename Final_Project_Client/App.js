@@ -26,6 +26,7 @@ import RescheduleDelivery from './components/RescheduleDelivery';
 import PaymentUpdates from './components/PaymentUpdates'; 
 import SearchingDrivers from './components/SearchingDrivers';
 import RiderConfirmed from './components/RiderConfirmed';
+import DeliveryComplete from './components/DeliveryComplete';
 
 // Import other components as needed
 
@@ -76,6 +77,7 @@ function MainNavigator() {
       <Stack.Screen name="PaymentUpdates" component={PaymentUpdates} />
       <Stack.Screen name="SearchingDrivers" component={SearchingDrivers} />
       <Stack.Screen name="RiderConfirmed" component={RiderConfirmed} />
+      <Stack.Screen name="DeliveryComplete" component={DeliveryComplete} />
     </Stack.Navigator>
   );
 }

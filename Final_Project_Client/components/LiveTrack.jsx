@@ -151,6 +151,17 @@ const LiveTrack = ({ navigation, route }) => {
         };
     }, [currentOrder?.rideRequestId, currentOrder?.driver?.id]);
 
+    // Navigate to rating screen when delivery is completed
+    useEffect(() => {
+        if (currentOrder?.deliveryStatus === 'delivered' && !currentOrder?.isRated) {
+            console.log('🎉 Delivery completed, navigating to rating screen');
+            navigation.navigate('DeliveryComplete', {
+                orderData: currentOrder,
+                driver: currentOrder.driver
+            });
+        }
+    }, [currentOrder?.deliveryStatus, currentOrder?.isRated, navigation]);
+
     // Get status display info
     const getStatusInfo = (deliveryStatus) => {
         switch (deliveryStatus) {

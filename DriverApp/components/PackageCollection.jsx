@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, TextInput, Alert, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, Alert, ScrollView, ActivityIndicator, Linking } from 'react-native';
 import { Ionicons, FontAwesome } from '@expo/vector-icons';
 import MapView, { Marker } from 'react-native-maps';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -27,6 +27,13 @@ const PackageCollection = () => {
                 pickupLocation: rideRequest.packageDetails?.pickupLocation,
                 dropoffLocation: rideRequest.packageDetails?.dropoffLocation
             });
+            
+            // Additional detailed logging for debugging
+            console.log('🔍 Full rideRequest structure:', JSON.stringify(rideRequest, null, 2));
+            console.log('🔍 rideRequest keys:', Object.keys(rideRequest));
+            console.log('🔍 rideRequest.id type:', typeof rideRequest.id, 'value:', rideRequest.id);
+        } else {
+            console.log('🔍 PackageCollection: No rideRequest received');
         }
     }, [rideRequest]);
 
@@ -68,6 +75,22 @@ const PackageCollection = () => {
     }, [packageDetails]);
 
     const handleStartCollection = async () => {
+        // Validate that we have a valid ride request ID
+        if (!rideRequest?.id) {
+            console.error('❌ Cannot start collection: Missing ride request ID');
+            Alert.alert(
+                'Error', 
+                'Unable to start collection process. Invalid or missing order ID. Please go back and try again.',
+                [
+                    {
+                        text: 'Go Back',
+                        onPress: () => navigation.goBack()
+                    }
+                ]
+            );
+            return;
+        }
+
         setCollectionStatus('collecting');
 
         try {
@@ -104,6 +127,22 @@ const PackageCollection = () => {
 
         if (enteredPin.length !== 4) {
             Alert.alert('Invalid PIN', 'PIN must be 4 digits.');
+            return;
+        }
+
+        // Validate that we have a valid ride request ID
+        if (!rideRequest?.id) {
+            console.error('❌ Cannot validate PIN: Missing ride request ID');
+            Alert.alert(
+                'Error', 
+                'Unable to validate PIN. Invalid or missing order ID. Please go back and try again.',
+                [
+                    {
+                        text: 'Go Back',
+                        onPress: () => navigation.goBack()
+                    }
+                ]
+            );
             return;
         }
 
@@ -292,6 +331,25 @@ const PackageCollection = () => {
                     onPress={() => navigation.navigate("DriverHome")}
                 >
                     <Text className="text-white font-medium">Go Back</Text>
+                </TouchableOpacity>
+            </View>
+        );
+    }
+
+    // Additional validation for missing order ID
+    if (!rideRequest.id) {
+        return (
+            <View className="flex-1 justify-center items-center bg-white">
+                <Ionicons name="alert-circle-outline" size={64} color="red" />
+                <Text className="text-red-600 text-lg mt-4 text-center px-4">Invalid Order Data</Text>
+                <Text className="text-gray-600 text-center mt-2 px-6">
+                    The order ID is missing or invalid. This may be due to a navigation error.
+                </Text>
+                <TouchableOpacity 
+                    className="bg-blue-600 px-6 py-3 rounded-lg mt-4"
+                    onPress={() => navigation.navigate("DriverHome")}
+                >
+                    <Text className="text-white font-medium">Return to Home</Text>
                 </TouchableOpacity>
             </View>
         );

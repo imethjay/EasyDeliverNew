@@ -8,6 +8,7 @@ import {
   Image,
   ActivityIndicator,
 } from "react-native";
+import { FontAwesome } from "@expo/vector-icons";
 import { collection, query, where, orderBy, onSnapshot } from "firebase/firestore";
 import { auth, db } from "../firebase/init";
 import { widthPercentageToDP as wp, heightPercentageToDP as hp } from "react-native-responsive-screen";
@@ -140,6 +141,8 @@ const MyOrder = ({ navigation }) => {
             progress: displayStatus.progress,
             estimatedDelivery: getEstimatedDelivery(data.deliveryStatus, data.createdAt),
             deliveryStatus: data.deliveryStatus || 'pending',
+            isRated: data.isRated || false,
+            customerRating: data.customerRating || null,
             // Include full data for navigation
             fullData: {
               ...data,
@@ -416,8 +419,50 @@ const MyOrder = ({ navigation }) => {
                 {item.fullData?.driver && (
                   <View className="bg-gray-50 rounded-lg p-3 mt-2">
                     <Text className="text-gray-600 text-sm font-medium">Driver Assigned</Text>
-                    <Text className="text-gray-800 font-medium">{item.fullData.driver.name}</Text>
-                    <Text className="text-gray-500 text-sm">{item.fullData.driver.vehicle} • {item.fullData.driver.phone}</Text>
+                    <Text className="text-gray-800 font-medium">{item.fullData.driver.fullName || item.fullData.driver.name}</Text>
+                    <Text className="text-gray-500 text-sm">{item.fullData.driver.vehicleNumber || item.fullData.driver.vehicle} • {item.fullData.driver.phoneNumber || item.fullData.driver.phone}</Text>
+                  </View>
+                )}
+
+                {/* Rating Section - Only for delivered orders */}
+                {item.deliveryStatus === 'delivered' && (
+                  <View className="mt-3 pt-3 border-t border-gray-200">
+                    {item.isRated ? (
+                      <View className="flex-row items-center justify-between">
+                        <Text className="text-gray-600 text-sm">Your Rating:</Text>
+                        <View className="flex-row items-center">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <FontAwesome
+                              key={star}
+                              name="star"
+                              size={16}
+                              color={star <= (item.customerRating || 0) ? "#F59E0B" : "#D1D5DB"}
+                              style={{ marginHorizontal: 1 }}
+                            />
+                          ))}
+                          <Text className="text-gray-600 text-sm ml-2">({item.customerRating}/5)</Text>
+                        </View>
+                      </View>
+                    ) : (
+                      <TouchableOpacity
+                        onPress={(e) => {
+                          e.stopPropagation(); // Prevent triggering the order press
+                          navigation.navigate('DeliveryComplete', {
+                            orderData: item.fullData,
+                            driver: item.fullData.driver
+                          });
+                        }}
+                        className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex-row items-center justify-between"
+                      >
+                        <View className="flex-1">
+                          <Text className="text-yellow-800 font-medium text-sm">Rate Your Driver</Text>
+                          <Text className="text-yellow-600 text-xs">Share your experience with the delivery</Text>
+                        </View>
+                        <View className="bg-yellow-500 rounded-full px-3 py-1">
+                          <Text className="text-white text-xs font-medium">Rate</Text>
+                        </View>
+                      </TouchableOpacity>
+                    )}
                   </View>
                 )}
               </View>

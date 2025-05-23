@@ -428,13 +428,16 @@ const DriverHome = () => {
       console.log('🗺️ Starting location tracking for accepted trip');
       await LocationService.startTracking(incomingRequest.id, driver.id);
       
+      // Capture the request data before clearing state
+      const requestDataForNavigation = { ...incomingRequest };
+      
       // Close the modal first
       setShowRequestModal(false);
       setIncomingRequest(null);
       
       // Navigate to PackageCollection screen first (NEW FLOW)
       setTimeout(() => {
-        navigation.navigate('PackageCollection', { rideRequest: incomingRequest });
+        navigation.navigate('PackageCollection', { rideRequest: requestDataForNavigation });
       }, 500);
       
       console.log('✅ Request accepted successfully:', incomingRequest.id);

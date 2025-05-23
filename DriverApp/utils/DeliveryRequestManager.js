@@ -46,10 +46,23 @@ class DeliveryRequestManager {
       console.log('📨 Received', querySnapshot.docs.length, 'matching requests');
       
       querySnapshot.docs.forEach(docSnapshot => {
+        // Validate document ID
+        const docId = docSnapshot.id;
+        if (!docId || docId === 'undefined' || docId === '') {
+          console.error('❌ Invalid document ID detected:', docId);
+          return; // Skip this document
+        }
+
         const requestData = {
-          id: docSnapshot.id,
+          id: docId,
           ...docSnapshot.data()
         };
+
+        console.log('🔍 Processing request data:', {
+          id: requestData.id,
+          status: requestData.status,
+          hasPackageDetails: !!requestData.packageDetails
+        });
 
         this.processIncomingRequest(requestData);
       });

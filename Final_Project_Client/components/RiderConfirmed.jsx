@@ -208,6 +208,25 @@ const RiderConfirmed = () => {
         };
     }, [rideRequestId]);
 
+    // Navigate to rating screen when delivery is completed
+    useEffect(() => {
+        if (deliveryStatus === 'delivered') {
+            console.log('🎉 Delivery completed, navigating to rating screen');
+            navigation.navigate('DeliveryComplete', {
+                orderData: {
+                    rideRequestId,
+                    packageDetails,
+                    courierDetails,
+                    rideDetails,
+                    distance,
+                    duration,
+                    deliveryStatus
+                },
+                driver
+            });
+        }
+    }, [deliveryStatus, navigation, rideRequestId, packageDetails, courierDetails, rideDetails, distance, duration, driver]);
+
     // Function to get geocoding from address
     const getGeocodingFromAddress = async (address) => {
         try {
