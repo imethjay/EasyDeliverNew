@@ -15,16 +15,16 @@ import { widthPercentageToDP as wp, heightPercentageToDP as hp } from "react-nat
 const MyOrder = ({ navigation }) => {
   const [selectedTab, setSelectedTab] = useState("All");
   const [searchText, setSearchText] = useState("");
-  const [activeTab, setActiveTab] = useState("Delivery");
+  const [activeTab, setActiveTab] = useState("MyOrder");
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [userUID, setUserUID] = useState(null);
 
   const menuItems = [
       { icon: require("../assets/icon/home.png"), label: "Home", screen: "Home" },
-      { icon: require("../assets/icon/orders.png"), label: "Delivery", screen: "Delivery" },
-      { icon: require("../assets/icon/chat.png"), label: "Notifications", screen: "Notifications" },
-      { icon: require("../assets/icon/profile.png"), label: "Account", screen: "Account" },
+      { icon: require("../assets/icon/orders.png"), label: "Delivery", screen: "MyOrder" },
+      { icon: require("../assets/icon/chat.png"), label: "Notifications", screen: "ChatList" },
+      { icon: require("../assets/icon/profile.png"), label: "Account", screen: "Profile" },
   ];
 
   // Get current user UID
@@ -250,6 +250,14 @@ const MyOrder = ({ navigation }) => {
     }
   };
 
+  // Navigation handler for bottom tabs
+  const handleTabPress = (screenName) => {
+    setActiveTab(screenName);
+    if (screenName !== "MyOrder") {
+      navigation.navigate(screenName);
+    }
+  };
+
   if (loading) {
     return (
       <View className="flex-1 bg-white justify-center items-center">
@@ -432,10 +440,7 @@ const MyOrder = ({ navigation }) => {
           <TouchableOpacity
             key={index}
             className="items-center"
-            onPress={() => {
-              setActiveTab(item.screen);
-              navigation.navigate(item.screen);
-            }}
+            onPress={() => handleTabPress(item.screen)}
           >
             <Image
               source={item.icon}

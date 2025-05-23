@@ -5,7 +5,7 @@ import {
   signOut,
   onAuthStateChanged
 } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../../firebase/init';
 
 const AuthContext = createContext(null);
@@ -16,11 +16,44 @@ export const useAuth = () => {
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
+  const [userProfile, setUserProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Fetch user profile data from Firestore
+  const fetchUserProfile = async (uid) => {
+    try {
+      const userDocRef = doc(db, 'users', uid);
+      const userDocSnap = await getDoc(userDocRef);
+      
+      if (userDocSnap.exists()) {
+        const profileData = userDocSnap.data();
+        setUserProfile(profileData);
+        console.log('User profile loaded:', profileData);
+        return profileData;
+      } else {
+        console.log('No user profile found in Firestore');
+        setUserProfile(null);
+        return null;
+      }
+    } catch (error) {
+      console.error('Error fetching user profile:', error);
+      setUserProfile(null);
+      return null;
+    }
+  };
+
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setUser(user);
+      
+      if (user) {
+        // Fetch user profile data when user is authenticated
+        await fetchUserProfile(user.uid);
+      } else {
+        // Clear profile data when user logs out
+        setUserProfile(null);
+      }
+      
       setLoading(false);
     });
 
@@ -50,6 +83,9 @@ export const AuthProvider = ({ children }) => {
         
         await setDoc(doc(db, 'users', userCredential.user.uid), userDoc);
         console.log('User profile saved to Firestore');
+        
+        // Set the profile data locally
+        setUserProfile(userDoc);
       }
       
       return userCredential.user;
@@ -71,6 +107,7 @@ export const AuthProvider = ({ children }) => {
       }
       
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      // Profile will be fetched automatically by onAuthStateChanged
       return userCredential.user;
     } catch (error) {
       console.error('Login error:', {
@@ -99,18 +136,46 @@ export const AuthProvider = ({ children }) => {
   const logout = async () => {
     try {
       await signOut(auth);
+      // Clear profile data
+      setUserProfile(null);
     } catch (error) {
       console.error('Logout error:', error);
       throw error;
     }
   };
 
+  // Function to update user profile
+  const updateUserProfile = async (profileData) => {
+    try {
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+
+      const userDocRef = doc(db, 'users', user.uid);
+      const updatedData = {
+        ...profileData,
+        updatedAt: new Date().toISOString()
+      };
+
+      await setDoc(userDocRef, updatedData, { merge: true });
+      setUserProfile(prev => ({ ...prev, ...updatedData }));
+      console.log('User profile updated successfully');
+      return true;
+    } catch (error) {
+      console.error('Error updating user profile:', error);
+      throw error;
+    }
+  };
+
   const value = {
     user,
+    userProfile,
     loading,
     signup,
     login,
     logout,
+    updateUserProfile,
+    fetchUserProfile,
   };
 
   return (

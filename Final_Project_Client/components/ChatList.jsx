@@ -6,7 +6,7 @@ import { auth, db } from "../firebase/init";
 import { collection, query, where, getDocs } from "firebase/firestore";
 
 const ChatList = ({ navigation }) => {
-    const [activeTab, setActiveTab] = useState("Notifications");
+    const [activeTab, setActiveTab] = useState("ChatList");
     const [searchText, setSearchText] = useState("");
     const [chatList, setChatList] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -14,9 +14,9 @@ const ChatList = ({ navigation }) => {
 
     const menuItems = [
         { icon: require("../assets/icon/home.png"), label: "Home", screen: "Home" },
-        { icon: require("../assets/icon/orders.png"), label: "Delivery", screen: "Delivery" },
-        { icon: require("../assets/icon/chat.png"), label: "Notifications", screen: "Notifications" },
-        { icon: require("../assets/icon/profile.png"), label: "Account", screen: "Account" },
+        { icon: require("../assets/icon/orders.png"), label: "Delivery", screen: "MyOrder" },
+        { icon: require("../assets/icon/chat.png"), label: "Notifications", screen: "ChatList" },
+        { icon: require("../assets/icon/profile.png"), label: "Account", screen: "Profile" },
     ];
 
     useEffect(() => {
@@ -105,7 +105,9 @@ const ChatList = ({ navigation }) => {
 
     const handleNavigation = (screenName) => {
         setActiveTab(screenName);
-        navigation.navigate(screenName);
+        if (screenName !== "ChatList") {
+            navigation.navigate(screenName);
+        }
     };
 
     const renderChatItem = ({ item }) => {
