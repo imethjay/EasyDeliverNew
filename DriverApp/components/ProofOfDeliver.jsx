@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, Image, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, Image, Alert, ActionSheetIOS, Platform } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons, FontAwesome } from "@expo/vector-icons";
@@ -14,6 +14,34 @@ const ProofOfDeliveryScreen = ({ navigation }) => {
     const route = useRoute();
     const { rideRequest } = route.params || {};
 
+    const showImagePickerOptions = () => {
+        if (Platform.OS === 'ios') {
+            ActionSheetIOS.showActionSheetWithOptions(
+                {
+                    options: ['Cancel', 'Take Photo', 'Choose from Gallery'],
+                    cancelButtonIndex: 0,
+                },
+                (buttonIndex) => {
+                    if (buttonIndex === 1) {
+                        handleTakePhoto();
+                    } else if (buttonIndex === 2) {
+                        handleChooseFromGallery();
+                    }
+                }
+            );
+        } else {
+            Alert.alert(
+                'Select Photo',
+                'Choose an option to add proof of delivery photo',
+                [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Take Photo', onPress: handleTakePhoto },
+                    { text: 'Choose from Gallery', onPress: handleChooseFromGallery },
+                ]
+            );
+        }
+    };
+
     const handleTakePhoto = async () => {
         const { status } = await ImagePicker.requestCameraPermissionsAsync();
         if (status !== 'granted') {
@@ -22,6 +50,24 @@ const ProofOfDeliveryScreen = ({ navigation }) => {
         }
 
         const result = await ImagePicker.launchCameraAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: true,
+            quality: 0.7,
+        });
+
+        if (!result.canceled) {
+            setImage(result.assets[0].uri);
+        }
+    };
+
+    const handleChooseFromGallery = async () => {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+            Alert.alert('Permission denied', 'Photo library access is required to select a photo.');
+            return;
+        }
+
+        const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
             allowsEditing: true,
             quality: 0.7,
@@ -147,7 +193,7 @@ const ProofOfDeliveryScreen = ({ navigation }) => {
                 <Text className="text-base font-semibold mb-2">Package photo</Text>
 
                 <TouchableOpacity
-                    onPress={handleTakePhoto}
+                    onPress={showImagePickerOptions}
                     className="border border-gray-400 border-dashed rounded-xl h-36 justify-center items-center overflow-hidden"
                 >
                     {image ? (
@@ -155,10 +201,20 @@ const ProofOfDeliveryScreen = ({ navigation }) => {
                     ) : (
                         <>
                             <Icon name="camera" size={28} color="black" />
-                            <Text className="mt-2 text-gray-700">take a photo</Text>
+                            <Text className="mt-2 text-gray-700">Take a photo or choose from gallery</Text>
                         </>
                     )}
                 </TouchableOpacity>
+                
+                {image && (
+                    <TouchableOpacity
+                        onPress={() => setImage(null)}
+                        className="mt-2 bg-red-100 p-2 rounded-lg flex-row items-center justify-center"
+                    >
+                        <Ionicons name="trash" size={16} color="red" />
+                        <Text className="text-red-600 ml-1 font-medium">Remove Photo</Text>
+                    </TouchableOpacity>
+                )}
             </View>
             {/* Complete Button */}
             <TouchableOpacity 

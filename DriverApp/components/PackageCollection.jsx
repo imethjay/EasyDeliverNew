@@ -14,6 +14,7 @@ const PackageCollection = () => {
     const [enteredPin, setEnteredPin] = useState('');
     const [isValidating, setIsValidating] = useState(false);
     const [pickupLocation, setPickupLocation] = useState(null);
+    const [collectionStatus, setCollectionStatus] = useState('ready'); // ready, collecting, validating, completed
 
     const { packageDetails } = rideRequest || {};
 
@@ -66,6 +67,35 @@ const PackageCollection = () => {
         getPickupCoordinates();
     }, [packageDetails]);
 
+    const handleStartCollection = async () => {
+        setCollectionStatus('collecting');
+
+        try {
+            console.log('🔍 Starting collection process for order:', rideRequest.id);
+            
+            const rideRequestRef = doc(db, 'rideRequests', rideRequest.id);
+            
+            console.log('📝 Updating status to collecting...');
+            await updateDoc(rideRequestRef, {
+                deliveryStatus: 'collecting',
+                collectionStartedAt: serverTimestamp(),
+                updatedAt: serverTimestamp()
+            });
+            console.log('✅ Status updated to collecting');
+
+            Alert.alert(
+                'Collection Started',
+                'Please ask the customer for the 4-digit PIN to collect the package.',
+                [{ text: 'OK' }]
+            );
+
+        } catch (error) {
+            console.error('❌ Error starting collection:', error);
+            Alert.alert('Error', 'Failed to start collection process. Please try again.');
+            setCollectionStatus('ready');
+        }
+    };
+
     const handlePackageCollected = async () => {
         if (!enteredPin.trim()) {
             Alert.alert('PIN Required', 'Please enter the 4-digit PIN provided by the customer.');
@@ -78,6 +108,7 @@ const PackageCollection = () => {
         }
 
         setIsValidating(true);
+        setCollectionStatus('validating');
 
         // Add timeout to prevent hanging operations
         const timeoutPromise = new Promise((_, reject) => {
@@ -87,19 +118,7 @@ const PackageCollection = () => {
         try {
             console.log('🔍 Starting PIN validation process for order:', rideRequest.id);
             
-            // First, update status to 'collecting' to indicate driver is in collection process
             const rideRequestRef = doc(db, 'rideRequests', rideRequest.id);
-            
-            console.log('📝 Updating status to collecting...');
-            await Promise.race([
-                updateDoc(rideRequestRef, {
-                    deliveryStatus: 'collecting',
-                    collectionStartedAt: serverTimestamp(),
-                    updatedAt: serverTimestamp()
-                }),
-                timeoutPromise
-            ]);
-            console.log('✅ Status updated to collecting');
 
             // Get the current ride request to validate PIN
             console.log('📖 Fetching current ride request data...');
@@ -120,20 +139,15 @@ const PackageCollection = () => {
             // Validate PIN
             if (rideData.deliveryPin !== enteredPin) {
                 console.log('❌ PIN validation failed - incorrect PIN');
-                // Reset status if PIN is wrong
-                await Promise.race([
-                    updateDoc(rideRequestRef, {
-                        deliveryStatus: 'accepted',
-                        updatedAt: serverTimestamp()
-                    }),
-                    timeoutPromise
-                ]);
                 Alert.alert('Incorrect PIN', 'The PIN you entered is incorrect. Please check with the customer and try again.');
                 setEnteredPin('');
+                setCollectionStatus('collecting');
                 return;
             }
 
             console.log('✅ PIN validation successful');
+            setCollectionStatus('completed');
+            
             // PIN is correct - update delivery status to in_transit
             console.log('📝 Updating status to in_transit...');
             await Promise.race([
@@ -150,15 +164,14 @@ const PackageCollection = () => {
             // Show success message first
             console.log('🎉 Package collection completed successfully');
             Alert.alert(
-                'Package Collected!',
-                'PIN verified successfully. You can now proceed to the delivery location.',
+                'Package Collected Successfully!',
+                'PIN verified. You can now proceed to the delivery location.',
                 [
                     {
                         text: 'Start Delivery',
                         onPress: () => {
                             try {
                                 console.log('🚚 Navigating to OrderPreview...');
-                                // Use navigate instead of replace to avoid navigation stack issues
                                 navigation.navigate('OrderPreview', { 
                                     rideRequest: {
                                         ...rideRequest,
@@ -168,7 +181,6 @@ const PackageCollection = () => {
                                 console.log('✅ Navigation completed successfully');
                             } catch (navigationError) {
                                 console.error('❌ Navigation error:', navigationError);
-                                // Fallback navigation
                                 Alert.alert(
                                     'Navigation Error',
                                     'Unable to navigate to order preview. Returning to previous screen.',
@@ -187,6 +199,7 @@ const PackageCollection = () => {
 
         } catch (error) {
             console.error('❌ Error validating PIN:', error);
+            setCollectionStatus('collecting');
             if (error.message === 'Operation timed out') {
                 Alert.alert('Timeout', 'The operation is taking too long. Please check your internet connection and try again.');
             } else {
@@ -198,23 +211,76 @@ const PackageCollection = () => {
     };
 
     const handleCallCustomer = () => {
-        if (packageDetails?.senderPhone) {
+        if (packageDetails?.customerPhone) {
             Alert.alert(
                 'Call Customer',
-                `Call ${packageDetails.senderName || 'customer'} at ${packageDetails.senderPhone}?`,
+                `Call ${packageDetails.customerPhone}?`,
                 [
-                    { text: 'Cancel' },
-                    { text: 'Call', onPress: () => {
-                        // Import Linking if needed
-                        const { Linking } = require('react-native');
-                        Linking.openURL(`tel:${packageDetails.senderPhone}`);
-                    }}
+                    { text: 'Cancel', style: 'cancel' },
+                    { 
+                        text: 'Call', 
+                        onPress: () => {
+                            const phoneUrl = `tel:${packageDetails.customerPhone}`;
+                            Linking.openURL(phoneUrl).catch(err => {
+                                console.error('Error opening phone app:', err);
+                                Alert.alert('Error', 'Cannot open phone app');
+                            });
+                        }
+                    }
                 ]
             );
         } else {
-            Alert.alert('Contact Info', 'Customer phone number not available.');
+            Alert.alert('Contact Information', 'Customer phone number is not available.');
         }
     };
+
+    // Get status information for UI
+    const getStatusInfo = () => {
+        switch (collectionStatus) {
+            case 'ready':
+                return {
+                    title: 'Ready for Collection',
+                    message: 'Tap "Start Collection" when you arrive at the pickup location',
+                    color: 'text-blue-600',
+                    bgColor: 'bg-blue-50',
+                    icon: 'location-outline'
+                };
+            case 'collecting':
+                return {
+                    title: 'Collecting Package',
+                    message: 'Ask the customer for the 4-digit PIN',
+                    color: 'text-orange-600',
+                    bgColor: 'bg-orange-50',
+                    icon: 'cube-outline'
+                };
+            case 'validating':
+                return {
+                    title: 'Validating PIN',
+                    message: 'Please wait while we verify the PIN...',
+                    color: 'text-purple-600',
+                    bgColor: 'bg-purple-50',
+                    icon: 'key-outline'
+                };
+            case 'completed':
+                return {
+                    title: 'Collection Complete',
+                    message: 'Package collected successfully!',
+                    color: 'text-green-600',
+                    bgColor: 'bg-green-50',
+                    icon: 'checkmark-circle-outline'
+                };
+            default:
+                return {
+                    title: 'Collection',
+                    message: 'Preparing for collection...',
+                    color: 'text-gray-600',
+                    bgColor: 'bg-gray-50',
+                    icon: 'ellipsis-horizontal'
+                };
+        }
+    };
+
+    const statusInfo = getStatusInfo();
 
     if (!rideRequest) {
         return (
@@ -232,160 +298,138 @@ const PackageCollection = () => {
     }
 
     return (
-        <View className="flex-1 bg-white">
+        <ScrollView className="flex-1 bg-white">
             {/* Header */}
-            <View className="flex-row items-center p-4 bg-white shadow-sm">
-                <TouchableOpacity 
-                    className="rounded-full p-2 border-2 border-gray-200"
-                    onPress={() => navigation.goBack()}
-                >
-                    <Ionicons name="arrow-back" size={20} color="black" />
-                </TouchableOpacity>
-                <Text className="flex-1 text-lg font-bold ml-2 text-center">Package Collection</Text>
-                <View className="w-10" />
+            <View className="bg-blue-600 p-6 pb-8">
+                <View className="flex-row items-center mb-4">
+                    <TouchableOpacity onPress={() => navigation.goBack()}>
+                        <Ionicons name="arrow-back" size={24} color="white" />
+                    </TouchableOpacity>
+                    <Text className="text-white text-xl font-bold ml-4">Package Collection</Text>
+                </View>
+
+                {/* Status Card */}
+                <View className="bg-white rounded-xl p-4">
+                    <View className="flex-row items-center">
+                        <View className={`p-3 rounded-full ${statusInfo.bgColor} mr-4`}>
+                            <Ionicons name={statusInfo.icon} size={24} color={statusInfo.color.replace('text-', '#')} />
+                        </View>
+                        <View className="flex-1">
+                            <Text className="font-bold text-gray-800 mb-1">{statusInfo.title}</Text>
+                            <Text className="text-gray-600 text-sm">{statusInfo.message}</Text>
+                        </View>
+                    </View>
+                </View>
             </View>
 
-            <ScrollView className="flex-1">
-                {/* Map showing pickup location */}
-                <View className="h-64 m-4 rounded-lg overflow-hidden">
+            {/* Map View */}
+            {pickupLocation && (
+                <View className="h-64 mx-4 rounded-xl overflow-hidden mb-4 shadow-sm">
                     <MapView
                         style={{ flex: 1 }}
-                        initialRegion={{
-                            latitude: pickupLocation?.latitude || 6.9271,
-                            longitude: pickupLocation?.longitude || 79.8612,
-                            latitudeDelta: 0.01,
-                            longitudeDelta: 0.01,
-                        }}
-                        region={pickupLocation ? {
+                        region={{
                             latitude: pickupLocation.latitude,
                             longitude: pickupLocation.longitude,
                             latitudeDelta: 0.01,
                             longitudeDelta: 0.01,
-                        } : undefined}
+                        }}
                     >
-                        {pickupLocation && (
-                            <Marker 
-                                coordinate={pickupLocation} 
-                                title="Pickup Location"
-                                pinColor="blue"
-                            />
-                        )}
+                        <Marker
+                            coordinate={pickupLocation}
+                            title="Pickup Location"
+                            description={packageDetails?.pickupLocation}
+                        />
                     </MapView>
                 </View>
+            )}
 
-                {/* Pickup Address */}
-                <View className="mx-4 p-4 bg-blue-50 rounded-lg mb-4">
-                    <View className="flex-row items-center justify-between">
-                        <View className="flex-1">
-                            <View className="flex-row items-center">
-                                <FontAwesome name="map-marker" size={20} color="blue" />
-                                <Text className="font-bold text-lg ml-2 text-blue-800">Pickup Location</Text>
-                            </View>
-                            <Text className="text-gray-700 mt-2">
-                                {packageDetails?.pickupLocation || 'Pickup location not specified'}
-                            </Text>
+            {/* Package Information */}
+            <View className="mx-4 bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-4">
+                <Text className="text-lg font-bold text-gray-800 mb-3">Package Information</Text>
+                
+                {packageDetails && (
+                    <>
+                        <View className="mb-3">
+                            <Text className="font-semibold text-gray-800 mb-1">{packageDetails.packageName}</Text>
+                            <Text className="text-gray-600">{packageDetails.shipmentType}</Text>
+                            {packageDetails.weight && (
+                                <Text className="text-gray-500 text-sm">Weight: {packageDetails.weight} kg</Text>
+                            )}
                         </View>
-                        <TouchableOpacity 
-                            className="bg-blue-600 px-4 py-2 rounded-lg ml-3"
-                            onPress={() => {
-                                const address = encodeURIComponent(packageDetails?.pickupLocation || '');
-                                const { Linking } = require('react-native');
-                                Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${address}`);
-                            }}
+
+                        <View className="space-y-2">
+                            <View>
+                                <Text className="text-gray-500 text-sm font-medium">Pickup Address</Text>
+                                <Text className="text-gray-800">{packageDetails.pickupLocation}</Text>
+                            </View>
+                            
+                            <View>
+                                <Text className="text-gray-500 text-sm font-medium">Delivery Address</Text>
+                                <Text className="text-gray-800">{packageDetails.dropoffLocation}</Text>
+                            </View>
+                        </View>
+                    </>
+                )}
+            </View>
+
+            {/* PIN Entry Section - Only show when collecting */}
+            {collectionStatus === 'collecting' && (
+                <View className="mx-4 bg-orange-50 border border-orange-200 rounded-xl p-4 mb-4">
+                    <Text className="text-orange-800 font-bold text-lg mb-2">Enter Collection PIN</Text>
+                    <Text className="text-orange-600 text-sm mb-4">
+                        Ask the customer for the 4-digit PIN to verify package collection.
+                    </Text>
+                    
+                    <View className="flex-row items-center space-x-4">
+                        <TextInput
+                            value={enteredPin}
+                            onChangeText={setEnteredPin}
+                            placeholder="Enter 4-digit PIN"
+                            keyboardType="numeric"
+                            maxLength={4}
+                            className="flex-1 bg-white border border-orange-300 rounded-lg px-4 py-3 text-lg font-bold text-center"
+                            style={{ letterSpacing: 4 }}
+                        />
+                        <TouchableOpacity
+                            onPress={handlePackageCollected}
+                            disabled={isValidating || enteredPin.length !== 4}
+                            className={`px-6 py-3 rounded-lg ${
+                                enteredPin.length === 4 && !isValidating 
+                                    ? 'bg-orange-600' 
+                                    : 'bg-gray-400'
+                            }`}
                         >
-                            <FontAwesome name="map" size={16} color="white" />
+                            {isValidating ? (
+                                <ActivityIndicator color="white" size="small" />
+                            ) : (
+                                <Text className="text-white font-bold">Verify</Text>
+                            )}
                         </TouchableOpacity>
                     </View>
                 </View>
+            )}
 
-                {/* Customer Information */}
-                <View className="mx-4 p-4 bg-gray-50 rounded-lg mb-4">
-                    <Text className="font-bold text-lg mb-3">Customer Information</Text>
-                    <View className="flex-row items-center justify-between">
-                        <View className="flex-1">
-                            <Text className="font-semibold">{packageDetails?.senderName || 'Customer'}</Text>
-                            <Text className="text-gray-600">{packageDetails?.senderPhone || 'Phone not provided'}</Text>
-                        </View>
-                        {packageDetails?.senderPhone && (
-                            <TouchableOpacity 
-                                className="bg-green-600 px-4 py-2 rounded-lg"
-                                onPress={handleCallCustomer}
-                            >
-                                <FontAwesome name="phone" size={16} color="white" />
-                            </TouchableOpacity>
-                        )}
-                    </View>
-                </View>
-
-                {/* Package Details */}
-                <View className="mx-4 p-4 bg-gray-50 rounded-lg mb-4">
-                    <Text className="font-bold text-lg mb-3">Package Details</Text>
-                    <Text className="text-gray-700">
-                        <Text className="font-semibold">Item:</Text> {packageDetails?.packageName || 'Package'}
-                    </Text>
-                    <Text className="text-gray-700 mt-1">
-                        <Text className="font-semibold">Type:</Text> {packageDetails?.shipmentType || 'Standard'}
-                    </Text>
-                    {packageDetails?.weight && (
-                        <Text className="text-gray-700 mt-1">
-                            <Text className="font-semibold">Weight:</Text> {packageDetails.weight} kg
-                        </Text>
-                    )}
-                </View>
-
-                {/* PIN Entry Section */}
-                <View className="mx-4 p-4 bg-orange-50 border border-orange-200 rounded-lg mb-4">
-                    <Text className="font-bold text-lg text-orange-800 mb-2">Collection Verification</Text>
-                    <Text className="text-orange-700 mb-4">
-                        Ask the customer for their 4-digit collection PIN and enter it below:
-                    </Text>
-                    
-                    <TextInput
-                        className="bg-white border border-orange-300 rounded-lg px-4 py-3 text-center text-2xl font-bold"
-                        placeholder="Enter 4-digit PIN"
-                        value={enteredPin}
-                        onChangeText={setEnteredPin}
-                        maxLength={4}
-                        keyboardType="numeric"
-                        autoFocus={true}
-                    />
-                </View>
-
-                {/* Action Button */}
-                <View className="mx-4 mb-6">
-                    <TouchableOpacity 
-                        className={`p-4 rounded-lg flex-row items-center justify-center ${
-                            enteredPin.length === 4 ? 'bg-green-600' : 'bg-gray-400'
-                        }`}
-                        onPress={handlePackageCollected}
-                        disabled={enteredPin.length !== 4 || isValidating}
+            {/* Action Buttons */}
+            <View className="mx-4 mb-6">
+                {collectionStatus === 'ready' && (
+                    <TouchableOpacity
+                        onPress={handleStartCollection}
+                        className="bg-blue-600 p-4 rounded-xl mb-3"
                     >
-                        {isValidating ? (
-                            <ActivityIndicator size="small" color="white" />
-                        ) : (
-                            <>
-                                <Ionicons name="checkmark-circle" size={20} color="white" />
-                                <Text className="text-white text-center font-bold ml-2">
-                                    Verify PIN & Collect Package
-                                </Text>
-                            </>
-                        )}
+                        <Text className="text-white text-center font-bold text-lg">Start Collection</Text>
                     </TouchableOpacity>
-                </View>
+                )}
 
-                {/* Instructions */}
-                <View className="mx-4 mb-6 p-4 bg-blue-50 rounded-lg">
-                    <Text className="font-bold text-blue-800 mb-2">📋 Collection Instructions</Text>
-                    <Text className="text-blue-700 text-sm">
-                        1. Arrive at the pickup location{'\n'}
-                        2. Contact the customer if needed{'\n'}
-                        3. Ask for their 4-digit collection PIN{'\n'}
-                        4. Enter the PIN to verify package collection{'\n'}
-                        5. Proceed to delivery location
-                    </Text>
-                </View>
-            </ScrollView>
-        </View>
+                {/* Customer Contact */}
+                <TouchableOpacity
+                    onPress={handleCallCustomer}
+                    className="bg-gray-100 p-4 rounded-xl flex-row items-center justify-center"
+                >
+                    <FontAwesome name="phone" size={20} color="#4B5563" />
+                    <Text className="text-gray-700 font-medium ml-2">Call Customer</Text>
+                </TouchableOpacity>
+            </View>
+        </ScrollView>
     );
 };
 

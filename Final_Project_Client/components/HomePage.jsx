@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -6,24 +6,132 @@ import {
   TouchableOpacity,
   ScrollView,
   Image,
+  ActivityIndicator,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { useWindowDimensions } from "react-native";
 import { widthPercentageToDP as wp, heightPercentageToDP as hp } from "react-native-responsive-screen";
+import { collection, query, where, orderBy, onSnapshot, limit } from "firebase/firestore";
+import { auth, db } from "../firebase/init";
 
 const HomePage = () => {
   const { width } = useWindowDimensions();
   const [trackingID, setTrackingID] = useState("");
+  const [currentShipment, setCurrentShipment] = useState(null);
+  const [trackingHistory, setTrackingHistory] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [userUID, setUserUID] = useState(null);
   const navigation = useNavigation();
+
+  // Get current user UID
+  useEffect(() => {
+    const user = auth.currentUser;
+    if (user) {
+      setUserUID(user.uid);
+    } else {
+      console.log('No authenticated user found');
+      setLoading(false);
+    }
+  }, []);
+
+  // Real-time listener for active orders
+  useEffect(() => {
+    if (!userUID) return;
+
+    console.log('Setting up real-time orders listener for homepage:', userUID);
+    
+    const ordersQuery = query(
+      collection(db, 'rideRequests'),
+      where('customerId', '==', userUID),
+      orderBy('createdAt', 'desc'),
+      limit(10)
+    );
+
+    const unsubscribe = onSnapshot(ordersQuery, (snapshot) => {
+      try {
+        const ordersData = [];
+        let activeOrder = null;
+        
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          const orderData = {
+            id: doc.id,
+            trackingId: doc.id.substring(0, 10).toUpperCase(),
+            item: data.packageDetails?.packageName || 'Package',
+            from: data.packageDetails?.pickupLocation || 'Unknown',
+            to: data.packageDetails?.dropoffLocation || 'Unknown',
+            status: getDeliveryStatusDisplay(data.deliveryStatus || 'pending'),
+            deliveryStatus: data.deliveryStatus || 'pending',
+            image: require("../assets/icon/package.png"),
+            fullData: { ...data, rideRequestId: doc.id }
+          };
+
+          ordersData.push(orderData);
+
+          // Set the first active order as current shipment
+          if (!activeOrder && ['accepted', 'collecting', 'in_transit'].includes(data.deliveryStatus)) {
+            activeOrder = orderData;
+          }
+        });
+
+        setTrackingHistory(ordersData);
+        setCurrentShipment(activeOrder);
+        setLoading(false);
+        console.log(`✅ Loaded ${ordersData.length} orders for homepage`);
+      } catch (error) {
+        console.error('❌ Error processing orders:', error);
+        setLoading(false);
+      }
+    }, (error) => {
+      console.error('❌ Error listening to orders:', error);
+      setLoading(false);
+    });
+
+    return () => {
+      console.log('🧹 Cleaning up homepage orders listener');
+      unsubscribe();
+    };
+  }, [userUID]);
+
+  // Get delivery status display information
+  const getDeliveryStatusDisplay = (deliveryStatus) => {
+    switch (deliveryStatus) {
+      case 'accepted':
+        return 'Driver Assigned - Coming to pickup';
+      case 'collecting':
+        return 'Driver collecting package';
+      case 'in_transit':
+        return 'Package in transit';
+      case 'delivered':
+        return 'Delivered';
+      case 'cancelled':
+        return 'Cancelled';
+      default:
+        return 'Searching for driver';
+    }
+  };
+
+  // Get status color based on delivery status
+  const getStatusColor = (deliveryStatus) => {
+    switch (deliveryStatus) {
+      case 'accepted':
+        return 'text-blue-600';
+      case 'collecting':
+        return 'text-orange-600';
+      case 'in_transit':
+        return 'text-green-600';
+      case 'delivered':
+        return 'text-green-700';
+      case 'cancelled':
+        return 'text-red-600';
+      default:
+        return 'text-yellow-600';
+    }
+  };
 
   const clearSearch = () => {
     setTrackingID("");
   };
-
-  const trackingHistory = [
-    { id: "EX123456", item: "JBL Earbuds", from: "Panadura", to: "Colombo", status: "In Transit", image: require("../assets/icon/package.png") },
-    { id: "EX789012", item: "Laptop", from: "Galle", to: "Kandy", status: "Delivered", image: require("../assets/icon/package.png") },
-  ];
 
   const [activeTab, setActiveTab] = useState("Home"); // Default selected tab
   
@@ -39,6 +147,25 @@ const HomePage = () => {
     setActiveTab(screenName);
     if (screenName !== "Home") {
       navigation.navigate(screenName);
+    }
+  };
+
+  // Handle tracking history item press
+  const handleTrackingItemPress = (item) => {
+    if (['accepted', 'collecting', 'in_transit'].includes(item.deliveryStatus)) {
+      // Navigate to RiderConfirmed for active orders
+      navigation.navigate('RiderConfirmed', {
+        packageDetails: item.fullData.packageDetails,
+        courierDetails: item.fullData.courierDetails,
+        rideDetails: item.fullData.rideDetails,
+        distance: item.fullData.distance,
+        duration: item.fullData.duration,
+        driver: item.fullData.driver,
+        rideRequestId: item.fullData.rideRequestId
+      });
+    } else {
+      // Navigate to OrderPreview for completed orders
+      navigation.navigate('TrackingDetails', { order: item.fullData });
     }
   };
   
@@ -125,7 +252,7 @@ const HomePage = () => {
 
           <TouchableOpacity 
             className="items-center" 
-            onPress={() => navigation.navigate("History")}
+            onPress={() => navigation.navigate("MyOrder")}
           >
             <View
               className="p-4"
@@ -145,7 +272,7 @@ const HomePage = () => {
               />
             </View>
             <Text className="mt-2 text-base font-medium" style={{ fontSize: wp("4%") }}>
-              History
+              My Orders
             </Text>
           </TouchableOpacity>
         </View>
@@ -155,55 +282,93 @@ const HomePage = () => {
           <Text className="text-lg font-semibold mb-4" style={{ fontSize: wp("4.5%") }}>
             Current Shipment
           </Text>
-          <View className="bg-white rounded-xl p-4 shadow-sm">
-            <View className="flex-row items-center mb-4">
-              <View
-                className="bg-gray-200 rounded-full"
-                style={{
-                  width: wp("14%"),
-                  height: wp("14%"),
-                  justifyContent: "center",
-                  alignItems: "center",
-                }}
-              >
-                <Image
-                  source={require("../assets/icon/package.png")}
-                  style={{ width: 35, height: 35 }}
-                  resizeMode="contain"
-                />
-              </View>
-              <View className="ml-4">
-                <Text className="font-semibold text-base" style={{ fontSize: wp("4%") }}>
-                  JBL Earbuds
-                </Text>
-                <Text className="text-gray-500 text-sm" style={{ fontSize: wp("3.5%") }}>
-                  #Tracking ID: EX123456
-                </Text>
-              </View>
+          {loading ? (
+            <View className="bg-white rounded-xl p-4 shadow-sm justify-center items-center" style={{ height: 120 }}>
+              <ActivityIndicator size="large" color="#1E40AF" />
+              <Text className="text-gray-500 mt-2">Loading your orders...</Text>
             </View>
-            <Text className="text-gray-600" style={{ fontSize: wp("3.8%") }}>
-              <Text className="font-semibold">From: </Text>20/6, Panadura
-            </Text>
-            <Text className="text-gray-600 mb-2" style={{ fontSize: wp("3.8%") }}>
-              <Text className="font-semibold">Shipping to: </Text>20/6, Panadura
-            </Text>
-            <Text className="text-blue-600 font-medium" style={{ fontSize: wp("4%") }}>
-              Status: Your Package is in transit
-            </Text>
-          </View>
+          ) : currentShipment ? (
+            <TouchableOpacity 
+              className="bg-white rounded-xl p-4 shadow-sm"
+              onPress={() => handleTrackingItemPress(currentShipment)}
+            >
+              <View className="flex-row items-center mb-4">
+                <View
+                  className="bg-gray-200 rounded-full"
+                  style={{
+                    width: wp("14%"),
+                    height: wp("14%"),
+                    justifyContent: "center",
+                    alignItems: "center",
+                  }}
+                >
+                  <Image
+                    source={require("../assets/icon/package.png")}
+                    style={{ width: 35, height: 35 }}
+                    resizeMode="contain"
+                  />
+                </View>
+                <View className="ml-4 flex-1">
+                  <Text className="font-semibold text-base" style={{ fontSize: wp("4%") }}>
+                    {currentShipment.item}
+                  </Text>
+                  <Text className="text-gray-500 text-sm" style={{ fontSize: wp("3.5%") }}>
+                    #Tracking ID: {currentShipment.trackingId}
+                  </Text>
+                </View>
+              </View>
+              <Text className="text-gray-600" style={{ fontSize: wp("3.8%") }}>
+                <Text className="font-semibold">From: </Text>{currentShipment.from}
+              </Text>
+              <Text className="text-gray-600 mb-2" style={{ fontSize: wp("3.8%") }}>
+                <Text className="font-semibold">To: </Text>{currentShipment.to}
+              </Text>
+              <Text className={`font-medium ${getStatusColor(currentShipment.deliveryStatus)}`} style={{ fontSize: wp("4%") }}>
+                Status: {currentShipment.status}
+              </Text>
+            </TouchableOpacity>
+          ) : (
+            <View className="bg-white rounded-xl p-4 shadow-sm justify-center items-center" style={{ height: 120 }}>
+              <Text className="text-gray-500 text-center" style={{ fontSize: wp("4%") }}>
+                No active deliveries
+              </Text>
+              <Text className="text-gray-400 text-center mt-2" style={{ fontSize: wp("3.5%") }}>
+                Create a new delivery to get started
+              </Text>
+            </View>
+          )}
         </View>
+
+        {/* Recent Orders Section */}
         <View className="px-6 mt-8">
-          <Text className="text-lg font-semibold mb-4" style={{ fontSize: wp("4.5%") }}>Tracking History</Text>
-          {trackingHistory.map((item, index) => (
-            <TouchableOpacity key={index} className="bg-white rounded-xl p-4 shadow-sm mb-4 flex-row items-center">
+          <Text className="text-lg font-semibold mb-4" style={{ fontSize: wp("4.5%") }}>Recent Orders</Text>
+          {trackingHistory.slice(0, 3).map((item, index) => (
+            <TouchableOpacity 
+              key={index} 
+              className="bg-white rounded-xl p-4 shadow-sm mb-4 flex-row items-center"
+              onPress={() => handleTrackingItemPress(item)}
+            >
               <Image source={item.image} style={{ width: 25, height: 25, marginRight: 10 }} resizeMode="contain" />
-              <View>
-                <Text className="font-semibold text-base">{item.item}</Text>
-                <Text className="text-gray-500 text-sm">#Tracking ID: {item.id}</Text>
-                
+              <View className="flex-1">
+                <Text className="font-semibold text-base" style={{ fontSize: wp("4%") }}>{item.item}</Text>
+                <Text className="text-gray-500 text-sm" style={{ fontSize: wp("3.5%") }}>#Tracking ID: {item.trackingId}</Text>
+                <Text className={`text-sm mt-1 ${getStatusColor(item.deliveryStatus)}`} style={{ fontSize: wp("3.5%") }}>
+                  {item.status}
+                </Text>
               </View>
             </TouchableOpacity>
           ))}
+          
+          {trackingHistory.length > 3 && (
+            <TouchableOpacity 
+              className="bg-blue-50 rounded-xl p-4 justify-center items-center"
+              onPress={() => navigation.navigate("MyOrder")}
+            >
+              <Text className="text-blue-600 font-medium" style={{ fontSize: wp("4%") }}>
+                View All Orders ({trackingHistory.length})
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       </ScrollView>
 

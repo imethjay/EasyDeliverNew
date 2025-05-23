@@ -14,7 +14,7 @@ import OTPVerification from './components/OTPVerification';
 import DriverHome from './components/DriverHome';
 import StatsPage from './components/StatsPage';
 import MyOrder from './components/MyOrder';
-import ProofOfDelevery from './components/ProofOfDeliver.jsx';
+import ProofOfDeliveryScreen from './components/ProofOfDeliver.jsx';
 import RiderConfirmed from './components/RiderConfirmed';
 import DeliveryRequestModal from './components/DeliveryRequestModal';
 import OrderPreview from './components/OrderPreview';
@@ -76,7 +76,7 @@ export default function App() {
           <Stack.Screen name="RiderConfirmed" component={RiderConfirmed} />
           <Stack.Screen name="CustomerConfiremed" component={CustomerConfiremed} />
           <Stack.Screen name="DeliveryComplete" component={DeliveryComplete} />
-          <Stack.Screen name="ProofOfDelevery" component={ProofOfDelevery} />
+          <Stack.Screen name="ProofOfDeliver" component={ProofOfDeliveryScreen} />
           <Stack.Screen name="ChatList" component={ChatList} />
           <Stack.Screen name="ChatOp" component={ChatOp} />
           <Stack.Screen name="Profile" component={Profile} />
