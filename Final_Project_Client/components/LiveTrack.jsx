@@ -179,7 +179,8 @@ const LiveTrack = ({ navigation, route }) => {
         if (currentOrder?.driver?.uid) {
             navigation.navigate("ChatScreen", { 
                 recipientId: currentOrder.driver.uid, 
-                recipientName: currentOrder.driver.fullName 
+                recipientName: currentOrder.driver.fullName,
+                orderId: currentOrder.rideRequestId || currentOrder.id
             });
         } else {
             Alert.alert("Chat Unavailable", "Unable to start chat with driver.");

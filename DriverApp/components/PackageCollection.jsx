@@ -421,13 +421,31 @@ const PackageCollection = () => {
                 )}
 
                 {/* Customer Contact */}
-                <TouchableOpacity
-                    onPress={handleCallCustomer}
-                    className="bg-gray-100 p-4 rounded-xl flex-row items-center justify-center"
-                >
-                    <FontAwesome name="phone" size={20} color="#4B5563" />
-                    <Text className="text-gray-700 font-medium ml-2">Call Customer</Text>
-                </TouchableOpacity>
+                <View className="flex-row space-x-3">
+                    <TouchableOpacity
+                        onPress={handleCallCustomer}
+                        className="flex-1 bg-gray-100 p-4 rounded-xl flex-row items-center justify-center"
+                    >
+                        <FontAwesome name="phone" size={20} color="#4B5563" />
+                        <Text className="text-gray-700 font-medium ml-2">Call Customer</Text>
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity
+                        onPress={() => {
+                            if (rideRequest?.customerId) {
+                                navigation.navigate('ChatScreen', {
+                                    recipientId: rideRequest.customerId,
+                                    recipientName: packageDetails?.senderName || "Customer",
+                                    orderId: rideRequest.id
+                                });
+                            }
+                        }}
+                        className="flex-1 bg-blue-100 p-4 rounded-xl flex-row items-center justify-center"
+                    >
+                        <Ionicons name="chatbubble-ellipses" size={20} color="#2563EB" />
+                        <Text className="text-blue-700 font-medium ml-2">Chat Customer</Text>
+                    </TouchableOpacity>
+                </View>
             </View>
         </ScrollView>
     );

@@ -3,7 +3,7 @@ import { View, Text, ActivityIndicator, Image, TouchableOpacity, StyleSheet, Ani
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { doc, getDoc, collection, query, where, getDocs, addDoc, updateDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
-import { db } from '../firebase/init';
+import { db, auth } from '../firebase/init';
 
 const SearchingDrivers = () => {
   const navigation = useNavigation();
@@ -56,6 +56,7 @@ const SearchingDrivers = () => {
           rideDetails,
           distance,
           duration,
+          customerId: auth.currentUser?.uid,
           status: 'searching',
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp()

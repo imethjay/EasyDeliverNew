@@ -530,7 +530,17 @@ const OrderPreview = () => {
                 )}
                 <TouchableOpacity 
                   className="p-2 ml-2"
-                  onPress={() => navigation.navigate('ChatList')}
+                  onPress={() => {
+                    if (rideRequest?.customerId) {
+                      navigation.navigate('ChatScreen', {
+                        recipientId: rideRequest.customerId,
+                        recipientName: packageDetails?.senderName || "Customer",
+                        orderId: rideRequest.id
+                      });
+                    } else {
+                      navigation.navigate('ChatList');
+                    }
+                  }}
                 >
                   <Ionicons name="chatbubble-ellipses" size={24} color="blue" />
                 </TouchableOpacity>

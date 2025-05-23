@@ -78,7 +78,7 @@ export default function App() {
           <Stack.Screen name="DeliveryComplete" component={DeliveryComplete} />
           <Stack.Screen name="ProofOfDeliver" component={ProofOfDeliveryScreen} />
           <Stack.Screen name="ChatList" component={ChatList} />
-          <Stack.Screen name="ChatOp" component={ChatOp} />
+          <Stack.Screen name="ChatScreen" component={ChatOp} />
           <Stack.Screen name="Profile" component={Profile} />
         </Stack.Navigator>
         <StatusBar style="auto" />

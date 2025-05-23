@@ -322,7 +322,11 @@ const RiderConfirmed = () => {
     };
 
     const handleChatDriver = () => {
-        navigation.navigate("ChatScreen", { recipientId: driver?.uid, recipientName: driver?.fullName });
+        navigation.navigate("ChatScreen", { 
+            recipientId: driver?.uid, 
+            recipientName: driver?.fullName,
+            orderId: rideRequestId
+        });
     };
 
     const handleBackPress = () => {
