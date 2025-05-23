@@ -3,9 +3,27 @@ import { View, Text, Image, TouchableOpacity, Dimensions, ScrollView } from "rea
 import MapView, { Marker } from "react-native-maps";
 import { Ionicons, FontAwesome } from "@expo/vector-icons";
 import * as Location from "expo-location";
+import { useNavigation, useRoute } from "@react-navigation/native";
 
 const CustomerConfiremed = () => {
+    const navigation = useNavigation();
+    const route = useRoute();
+    const { rideRequest } = route.params || {};
     const [region, setRegion] = useState(null);
+
+    // Debug logging to check rideRequest data
+    useEffect(() => {
+        if (rideRequest) {
+            console.log('🔍 CustomerConfirmed received rideRequest:', {
+                id: rideRequest.id,
+                packageDetails: rideRequest.packageDetails,
+                pickupLocation: rideRequest.packageDetails?.pickupLocation,
+                dropoffLocation: rideRequest.packageDetails?.dropoffLocation
+            });
+        } else {
+            console.log('⚠️ CustomerConfirmed: No rideRequest received from navigation');
+        }
+    }, [rideRequest]);
 
     useEffect(() => {
         (async () => {
@@ -89,7 +107,9 @@ const CustomerConfiremed = () => {
                             <FontAwesome name="map-marker" size={18} color="blue" />
                             <Text className="ml-2 font-semibold">From:</Text>
                         </View>
-                        <Text className="text-gray-500">20/6, panadura</Text>
+                        <Text className="text-gray-500">
+                            {rideRequest?.packageDetails?.pickupLocation || 'Pickup location not specified'}
+                        </Text>
 
                     </View>
                     <View className="mt-4">
@@ -97,7 +117,9 @@ const CustomerConfiremed = () => {
                             <FontAwesome name="map-marker" size={18} color="gray" />
                             <Text className="ml-2 font-semibold">Shipping to:</Text>
                         </View>
-                        <Text className="text-gray-500">20/6, panadura</Text>
+                        <Text className="text-gray-500">
+                            {rideRequest?.packageDetails?.dropoffLocation || 'Dropoff location not specified'}
+                        </Text>
 
                     </View>
                 </View>

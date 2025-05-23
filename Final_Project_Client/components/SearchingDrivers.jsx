@@ -65,7 +65,16 @@ const SearchingDrivers = () => {
           selectedCourier: requestData.selectedCourier,
           vehicleType: requestData.rideDetails?.vehicleType,
           status: requestData.status,
-          fullRideDetails: requestData.rideDetails
+          fullRideDetails: requestData.rideDetails,
+          packageDetails: requestData.packageDetails
+        });
+        
+        console.log('📦 PACKAGE DETAILS being saved:', {
+          pickupLocation: packageDetails?.pickupLocation,
+          dropoffLocation: packageDetails?.dropoffLocation,
+          packageName: packageDetails?.packageName,
+          trackingId: packageDetails?.trackingId,
+          fullPackageDetails: packageDetails
         });
         
         const requestRef = await addDoc(collection(db, 'rideRequests'), requestData);

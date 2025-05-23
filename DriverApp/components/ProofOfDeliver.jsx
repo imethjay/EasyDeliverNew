@@ -51,6 +51,7 @@ const ProofOfDeliveryScreen = ({ navigation }) => {
             const requestRef = doc(db, 'rideRequests', rideRequest.id);
             await updateDoc(requestRef, {
                 status: 'completed',
+                deliveryStatus: 'delivered',
                 completedAt: serverTimestamp(),
                 proofOfDeliveryPhoto: image,
                 updatedAt: serverTimestamp()
@@ -75,12 +76,12 @@ const ProofOfDeliveryScreen = ({ navigation }) => {
 
             // Show success message
             Alert.alert(
-                'Delivery Completed!', 
-                'Thank you for completing the delivery successfully. You are now available for new delivery requests.',
+                'Delivery Completed!',
+                'The package has been successfully delivered. You are now available for new delivery requests.',
                 [
                     {
-                        text: 'OK',
-                        onPress: () => navigation.navigate('DeliveryComplete', { rideRequest })
+                        text: 'Return to Home',
+                        onPress: () => navigation.navigate('DriverHome')
                     }
                 ]
             );
@@ -109,20 +110,34 @@ const ProofOfDeliveryScreen = ({ navigation }) => {
                 <View className="bg-gray-100 rounded-xl p-4 space-y-3">
                     <View className="flex-row justify-between">
                         <Text className="text-gray-600">Pickup Location</Text>
-                        <Text className="text-gray-800 font-medium">No 20/6 Panadura</Text>
+                        <Text className="text-gray-800 font-medium flex-1 text-right" numberOfLines={2}>
+                            {rideRequest?.packageDetails?.pickupLocation || 'Not specified'}
+                        </Text>
                     </View>
                     <View className="flex-row justify-between">
                         <Text className="text-gray-600">Drop off Location</Text>
-                        <Text className="text-gray-800 font-medium">No 20/6 Panadura</Text>
+                        <Text className="text-gray-800 font-medium flex-1 text-right" numberOfLines={2}>
+                            {rideRequest?.packageDetails?.dropoffLocation || 'Not specified'}
+                        </Text>
                     </View>
                     <View className="flex-row justify-between">
                         <Text className="text-gray-600">Courier</Text>
-                        <Text className="text-gray-800 font-medium">Pronto Lanka</Text>
+                        <Text className="text-gray-800 font-medium">
+                            {rideRequest?.courierDetails?.companyName || 'Courier Service'}
+                        </Text>
                     </View>
                     <View className="border-t border-gray-300 my-2" />
                     <View className="flex-row justify-between">
                         <Text className="text-gray-600">Payment Method</Text>
-                        <Text className="text-gray-800 font-medium">Cash</Text>
+                        <Text className="text-gray-800 font-medium">
+                            {rideRequest?.rideDetails?.paymentMethod || 'Cash'}
+                        </Text>
+                    </View>
+                    <View className="flex-row justify-between">
+                        <Text className="text-gray-600">Package</Text>
+                        <Text className="text-gray-800 font-medium">
+                            {rideRequest?.packageDetails?.packageName || 'Package'}
+                        </Text>
                     </View>
                 </View>
             </View>

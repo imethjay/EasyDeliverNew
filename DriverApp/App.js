@@ -18,6 +18,7 @@ import ProofOfDelevery from './components/ProofOfDeliver.jsx';
 import RiderConfirmed from './components/RiderConfirmed';
 import DeliveryRequestModal from './components/DeliveryRequestModal';
 import OrderPreview from './components/OrderPreview';
+import PackageCollection from './components/PackageCollection';
 import LiveTrack from './components/LiveTrack';
 import CustomerConfiremed from './components/CustomerConfiremed';
 import DeliveryComplete from './components/DeliveryComplete';
@@ -68,6 +69,7 @@ export default function App() {
           <Stack.Screen name="StatsPage" component={StatsPage} />
           <Stack.Screen name="MyOrder" component={MyOrder} />
           <Stack.Screen name="OrderPreview" component={OrderPreview} />
+          <Stack.Screen name="PackageCollection" component={PackageCollection} />
           <Stack.Screen name="ResheduleDelivery" component={ResheduleDelivery} />
           <Stack.Screen name="LiveTrack" component={LiveTrack} />
           <Stack.Screen name="DeliveryRequestModal" component={DeliveryRequestModal} />

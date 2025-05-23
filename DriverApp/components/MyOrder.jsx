@@ -58,9 +58,9 @@ const MyOrder = () => {
         deliveries.push({
           id: doc.id,
           trackingNumber: data.packageDetails?.trackingId || doc.id.substring(0, 10),
-          status: mapFirebaseStatusToDisplay(data.status),
-          description: getStatusDescription(data.status, data.cancellationReason),
-          color: getStatusColor(data.status),
+          status: mapFirebaseStatusToDisplay(data.status, data.deliveryStatus),
+          description: getStatusDescription(data.status, data.deliveryStatus, data.cancellationReason),
+          color: getStatusColor(data.status, data.deliveryStatus),
           packageName: data.packageDetails?.packageName || 'Package',
           from: data.packageDetails?.pickupLocation || 'Unknown',
           to: data.packageDetails?.dropoffLocation || 'Unknown',
@@ -126,7 +126,24 @@ const MyOrder = () => {
   };
 
   // Map Firebase status to display status
-  const mapFirebaseStatusToDisplay = (firebaseStatus) => {
+  const mapFirebaseStatusToDisplay = (firebaseStatus, deliveryStatus) => {
+    // If we have a deliveryStatus, use that for more granular status display
+    if (deliveryStatus) {
+      switch (deliveryStatus) {
+        case 'accepted':
+          return 'Pending Collection';
+        case 'collecting':
+          return 'Collecting Package';
+        case 'in_transit':
+          return 'In Transit';
+        case 'delivered':
+          return 'Delivered';
+        default:
+          break;
+      }
+    }
+    
+    // Fallback to original status mapping
     switch (firebaseStatus) {
       case 'searching':
         return 'Pending';
@@ -142,7 +159,24 @@ const MyOrder = () => {
   };
 
   // Get status description
-  const getStatusDescription = (status, cancellationReason) => {
+  const getStatusDescription = (status, deliveryStatus, cancellationReason) => {
+    // If we have a deliveryStatus, provide more specific descriptions
+    if (deliveryStatus) {
+      switch (deliveryStatus) {
+        case 'accepted':
+          return 'Navigate to pickup location for package collection';
+        case 'collecting':
+          return 'Collecting package from customer with PIN verification';
+        case 'in_transit':
+          return 'Package collected, proceeding to delivery location';
+        case 'delivered':
+          return 'Package successfully delivered to recipient';
+        default:
+          break;
+      }
+    }
+    
+    // Fallback to original descriptions
     switch (status) {
       case 'searching':
         return 'Waiting for driver assignment';
@@ -158,7 +192,24 @@ const MyOrder = () => {
   };
 
   // Get status color
-  const getStatusColor = (status) => {
+  const getStatusColor = (status, deliveryStatus) => {
+    // If we have a deliveryStatus, use specific colors
+    if (deliveryStatus) {
+      switch (deliveryStatus) {
+        case 'accepted':
+          return 'text-orange-500';
+        case 'collecting':
+          return 'text-blue-500';
+        case 'in_transit':
+          return 'text-green-500';
+        case 'delivered':
+          return 'text-green-600';
+        default:
+          break;
+      }
+    }
+    
+    // Fallback to original color mapping
     switch (status) {
       case 'searching':
         return 'text-yellow-500';
@@ -177,9 +228,23 @@ const MyOrder = () => {
   const getFilteredOrders = () => {
     let filtered = orders;
 
-    // Filter by tab
+    // Filter by tab with improved mapping
     if (selectedTab !== "All") {
-      filtered = filtered.filter((order) => order.status === selectedTab);
+      filtered = filtered.filter((order) => {
+        // Map tab names to possible status values
+        switch (selectedTab) {
+          case "Pending":
+            return ['Pending', 'Pending Collection'].includes(order.status);
+          case "On process":
+            return ['On Process', 'Collecting Package', 'In Transit'].includes(order.status);
+          case "Finished":
+            return ['Finished', 'Delivered'].includes(order.status);
+          case "Cancelled":
+            return order.status === 'Cancelled';
+          default:
+            return order.status === selectedTab;
+        }
+      });
     }
 
     // Filter by search text
@@ -224,11 +289,17 @@ const MyOrder = () => {
 
   // Handle order item press
   const handleOrderPress = (order) => {
-    if (order.status === 'On Process') {
-      // Navigate to active delivery
-      navigation.navigate('OrderPreview', { rideRequest: order.fullData });
+    // Navigate to active delivery for all in-progress statuses
+    const activeStatuses = ['On Process', 'Pending Collection', 'Collecting Package', 'In Transit'];
+    if (activeStatuses.includes(order.status)) {
+      // Determine which screen to navigate to based on status
+      if (order.status === 'Pending Collection') {
+        navigation.navigate('PackageCollection', { rideRequest: order.fullData });
+      } else {
+        navigation.navigate('OrderPreview', { rideRequest: order.fullData });
+      }
     }
-    // Could add more navigation logic for other statuses
+    // Could add more navigation logic for other statuses like viewing completed order details
   };
 
   const filteredOrders = getFilteredOrders();

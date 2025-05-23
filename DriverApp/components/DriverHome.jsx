@@ -398,6 +398,7 @@ const DriverHome = () => {
         driverPhone: driver.phoneNumber || '',
         vehicleNumber: driver.vehicleNumber,
         acceptedAt: serverTimestamp(),
+        deliveryStatus: 'accepted', // Initialize delivery status
         updatedAt: serverTimestamp()
       });
       
@@ -431,9 +432,9 @@ const DriverHome = () => {
       setShowRequestModal(false);
       setIncomingRequest(null);
       
-      // Navigate to the delivery details screen
+      // Navigate to PackageCollection screen first (NEW FLOW)
       setTimeout(() => {
-        navigation.navigate('OrderPreview', { rideRequest: incomingRequest });
+        navigation.navigate('PackageCollection', { rideRequest: incomingRequest });
       }, 500);
       
       console.log('✅ Request accepted successfully:', incomingRequest.id);
