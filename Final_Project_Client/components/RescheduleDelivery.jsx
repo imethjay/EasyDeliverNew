@@ -9,7 +9,8 @@ import ScheduledDeliveryService from "../utils/ScheduledDeliveryService";
 export default function RescheduleDelivery() {
   const route = useRoute();
   const navigation = useNavigation();
-  const { orderData } = route.params || {};
+  const { order } = route.params || {};
+  const orderData = order; // For compatibility with existing code
   
   const [notifyCustomer, setNotifyCustomer] = useState(true);
   const [reason, setReason] = useState("");
@@ -121,7 +122,7 @@ export default function RescheduleDelivery() {
         {/* Package Details */}
         <View className="mb-4">
           <View className="flex-row items-center mb-2">
-            <FontAwesome name="box" size={16} color="#6B7280" />
+            <FontAwesome name="cube" size={16} color="#6B7280" />
             <Text className="ml-2 text-gray-700 font-medium">Package Details</Text>
           </View>
           <Text className="text-gray-600">
@@ -135,14 +136,34 @@ export default function RescheduleDelivery() {
           <View className="mb-4 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
             <Text className="text-yellow-800 font-medium text-sm mb-1">Currently scheduled for:</Text>
             <Text className="text-yellow-900 font-bold">
-              {new Date(orderData.scheduledDateTime).toLocaleDateString('en-US', {
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
-              })}
+              {(() => {
+                try {
+                  // Handle Firestore Timestamp or regular Date
+                  let scheduledDate;
+                  if (orderData.scheduledDateTime?.toDate && typeof orderData.scheduledDateTime.toDate === 'function') {
+                    // Firestore Timestamp
+                    scheduledDate = orderData.scheduledDateTime.toDate();
+                  } else if (orderData.scheduledDateTime?.seconds) {
+                    // Firestore Timestamp object with seconds
+                    scheduledDate = new Date(orderData.scheduledDateTime.seconds * 1000);
+                  } else {
+                    // Regular Date or timestamp
+                    scheduledDate = new Date(orderData.scheduledDateTime);
+                  }
+                  
+                  return scheduledDate.toLocaleDateString('en-US', {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  });
+                } catch (error) {
+                  console.error('Error formatting scheduled date:', error);
+                  return 'Invalid Date';
+                }
+              })()}
             </Text>
           </View>
         )}

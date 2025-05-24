@@ -61,13 +61,13 @@ const DeliveryDetails = ({ route, navigation }) => {
       case 'accepted':
         return { text: 'Driver Assigned - Coming to pickup', color: '#3B82F6', icon: 'car' };
       case 'collecting':
-        return { text: 'Driver collecting package', color: '#F59E0B', icon: 'package' };
+        return { text: 'Driver collecting package', color: '#F59E0B', icon: 'cube' };
       case 'in_transit':
-        return { text: 'Package in transit', color: '#10B981', icon: 'truck' };
+        return { text: 'Package in transit', color: '#10B981', icon: 'car-sport' };
       case 'delivered':
-        return { text: 'Delivered', color: '#059669', icon: 'check-circle' };
+        return { text: 'Delivered', color: '#059669', icon: 'checkmark-circle' };
       case 'cancelled':
-        return { text: 'Cancelled', color: '#EF4444', icon: 'x-circle' };
+        return { text: 'Cancelled', color: '#EF4444', icon: 'close-circle' };
       default:
         return { text: 'Searching for driver', color: '#F59E0B', icon: 'search' };
     }
@@ -362,9 +362,28 @@ const DeliveryDetails = ({ route, navigation }) => {
         </View>
       )}
 
+      {/* Pickup PIN Display */}
+      {orderData?.deliveryPin && !['delivered', 'cancelled'].includes(orderData?.deliveryStatus) && (
+        <View className="bg-blue-50 border border-blue-200 rounded-xl mx-4 mt-4 p-4">
+          <View className="flex-row items-center justify-center">
+            <View className="bg-blue-600 px-6 py-3 rounded-lg">
+              <Text className="text-center">
+                <Text className="text-white text-sm font-medium">Pickup PIN: </Text>
+                <Text className="text-white font-bold text-2xl">{orderData.deliveryPin}</Text>
+              </Text>
+            </View>
+          </View>
+          <Text className="text-blue-800 text-center text-sm mt-3 font-medium">
+            💡 Share this PIN with the driver for package collection
+          </Text>
+        </View>
+      )}
+
       {/* Action Buttons */}
       <View className="mx-4 mt-6 mb-8 space-y-3">
-        {orderData?.deliveryStatus === 'delivered' && (
+        {(orderData?.deliveryStatus === 'cancelled' || 
+          orderData?.deliveryStatus === 'scheduled' || 
+          orderData?.status === 'scheduled') && (
           <TouchableOpacity 
             className="bg-gray-600 p-4 rounded-xl"
             onPress={handleReschedule}

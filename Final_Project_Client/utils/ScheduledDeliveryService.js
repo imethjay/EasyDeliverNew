@@ -1,4 +1,4 @@
-import { collection, query, where, onSnapshot, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, updateDoc, doc, serverTimestamp, getDoc } from 'firebase/firestore';
 import { db } from '../firebase/init';
 import { isScheduledDeliveryReady } from './helpers';
 
@@ -215,12 +215,29 @@ class ScheduledDeliveryService {
     try {
       const deliveryRef = doc(db, 'rideRequests', deliveryId);
       
-      await updateDoc(deliveryRef, {
+      // First, get the current delivery data to check if it has a PIN
+      const deliveryDoc = await getDoc(deliveryRef);
+      const currentData = deliveryDoc.data();
+      
+      const updateData = {
         scheduledDateTime: newDateTime,
         scheduledTimestamp: newDateTime.getTime(),
+        status: 'scheduled',
+        deliveryStatus: 'scheduled',
         rescheduledAt: serverTimestamp(),
         updatedAt: serverTimestamp()
-      });
+      };
+      
+      // Ensure the delivery has a PIN - preserve existing or generate new one
+      if (!currentData?.deliveryPin) {
+        const deliveryPin = Math.floor(1000 + Math.random() * 9000).toString();
+        updateData.deliveryPin = deliveryPin;
+        console.log('🔐 Generated new PIN for rescheduled delivery:', deliveryPin);
+      } else {
+        console.log('🔐 Preserving existing PIN for rescheduled delivery:', currentData.deliveryPin);
+      }
+      
+      await updateDoc(deliveryRef, updateData);
       
       console.log('✅ Successfully rescheduled delivery:', deliveryId, 'to:', newDateTime);
     } catch (error) {
