@@ -2,10 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, Modal, TouchableOpacity, Image } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather'; // You can change the icon set
 import { formatCurrency } from '../utils/helpers';
+import PricingService from '../utils/PricingService';
 
 const DeliveryRequestModal = ({ visible, rideRequest, onAccept, onDecline }) => {
     const [timeLeft, setTimeLeft] = useState(60); // 60 seconds for better UX
-    const { packageDetails, courierDetails, rideDetails, distance, duration } = rideRequest || {};
+    const [pricingData, setPricingData] = useState(null);
+    const [earnings, setEarnings] = useState(0);
+    const { packageDetails, courierDetails, rideDetails, distance, duration, selectedCourier } = rideRequest || {};
 
     useEffect(() => {
         if (!visible) return;
@@ -28,27 +31,68 @@ const DeliveryRequestModal = ({ visible, rideRequest, onAccept, onDecline }) => 
         return () => clearInterval(interval);
     }, [visible, onDecline]);
 
+    // Fetch pricing data when modal opens
+    useEffect(() => {
+        const fetchPricing = async () => {
+            if (visible && rideRequest) {
+                try {
+                    console.log('🔍 Fetching pricing for delivery request');
+                    let pricing;
+                    
+                    // Try to get courier ID from selectedCourier or courierDetails
+                    const courierId = selectedCourier || courierDetails?.courierId;
+                    
+                    if (courierId) {
+                        pricing = await PricingService.getCourierPricing(courierId);
+                    } else {
+                        console.warn('No courier ID found, using default pricing');
+                        pricing = PricingService.getDefaultPricing();
+                    }
+                    
+                    setPricingData(pricing);
+                    
+                    // Calculate earnings
+                    const calculatedEarnings = calculateEarnings(pricing);
+                    setEarnings(calculatedEarnings);
+                    
+                } catch (error) {
+                    console.error('Error fetching pricing:', error);
+                    const defaultPricing = PricingService.getDefaultPricing();
+                    setPricingData(defaultPricing);
+                    setEarnings(calculateEarnings(defaultPricing));
+                }
+            }
+        };
+
+        fetchPricing();
+    }, [visible, rideRequest]);
+
     const formatTime = (sec) => `${Math.floor(sec / 60)}:${(sec % 60) < 10 ? '0' : ''}${sec % 60}`;
 
     if (!rideRequest) return null;
 
     // Calculate earnings based on ride details and distance
-    const calculateEarnings = () => {
+    const calculateEarnings = (pricing = pricingData) => {
+        if (!pricing) return 0;
+        
         // Base rate calculation
         let baseRate = 0;
         
         if (rideDetails && rideDetails.price) {
             // Driver gets 80% of the ride price
             baseRate = rideDetails.price * 0.8;
+            console.log('💰 Using ride price for earnings:', rideDetails.price, 'earnings:', baseRate);
         } else {
-            // Fallback calculation if price is not provided
-            baseRate = (distance || 5) * 150; // 150 LKR per km base rate
+            // Fallback calculation using pricing service
+            const distanceKm = distance || 2; // Distance should already be in km
+            const vehicleType = rideDetails?.vehicleType || 'Bike';
+            
+            console.log('💰 Calculating fallback earnings for:', vehicleType, 'distance:', distanceKm);
+            baseRate = PricingService.calculateDriverEarnings(vehicleType, distanceKm, pricing);
         }
         
-        return baseRate;
+        return Math.round(baseRate);
     };
-
-    const earnings = calculateEarnings();
 
     // Timer color based on urgency
     const getTimerColor = () => {
@@ -72,6 +116,11 @@ const DeliveryRequestModal = ({ visible, rideRequest, onAccept, onDecline }) => 
                         <Text className="text-center text-gray-500 text-sm mt-1">
                             A customer needs a delivery in your area
                         </Text>
+                        {pricingData?.isDefault && (
+                            <Text className="text-center text-yellow-600 text-xs mt-1">
+                                ⚠️ Using default pricing rates
+                            </Text>
+                        )}
                     </View>
 
                     {/* Timer */}
@@ -175,6 +224,11 @@ const DeliveryRequestModal = ({ visible, rideRequest, onAccept, onDecline }) => 
                                     {formatCurrency(earnings)}
                                 </Text>
                             </View>
+                            {pricingData && (
+                                <Text className="text-xs text-gray-400 mt-1">
+                                    Rate: {pricingData.vehicleRates?.[rideDetails?.vehicleType?.toLowerCase()] || 'N/A'} LKR/km • Min: {pricingData.minimumCharge} LKR
+                                </Text>
+                            )}
                         </View>
 
                         {/* Buttons */}

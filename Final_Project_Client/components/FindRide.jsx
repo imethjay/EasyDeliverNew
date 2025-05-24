@@ -18,6 +18,7 @@ import { useNavigation, useRoute } from "@react-navigation/native";
 import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "../firebase/init";
 import { formatCurrency } from "../utils/helpers";
+import PricingService from "../utils/PricingService";
 
 // Function to get geocoding from address
 const getGeocodingFromAddress = async (address) => {
@@ -48,6 +49,8 @@ const FindRide = () => {
     const [duration, setDuration] = useState(null);
     const [loading, setLoading] = useState(true);
     const [courierDetails, setCourierDetails] = useState(null);
+    const [rideOptions, setRideOptions] = useState([]);
+    const [pricingData, setPricingData] = useState(null);
     const [vehicleAvailability, setVehicleAvailability] = useState({
         Bike: 0,
         Car: 0,
@@ -63,7 +66,7 @@ const FindRide = () => {
     // Get package details and selected courier from navigation params
     const { packageDetails, selectedCourier } = route.params || {};
 
-    // Fetch courier details
+    // Fetch courier details and pricing
     useEffect(() => {
         const fetchCourierDetails = async () => {
             if (selectedCourier) {
@@ -72,8 +75,17 @@ const FindRide = () => {
                     if (courierDoc.exists()) {
                         setCourierDetails(courierDoc.data());
                     }
+
+                    // Fetch pricing data for this courier
+                    console.log('🔍 Fetching pricing for courier:', selectedCourier);
+                    const pricing = await PricingService.getCourierPricing(selectedCourier);
+                    setPricingData(pricing);
+                    console.log('💰 Pricing data loaded:', pricing);
                 } catch (err) {
                     console.error("Error fetching courier details:", err);
+                    // Use default pricing on error
+                    const defaultPricing = PricingService.getDefaultPricing();
+                    setPricingData(defaultPricing);
                 }
             }
         };
@@ -166,51 +178,36 @@ const FindRide = () => {
         }
     }, [pickup, dropoff]);
 
-    // Calculate prices based on package dimensions and weight
-    const calculatePrices = () => {
-        // Base prices
-        let baseSmall = 1000;
-        let baseMedium = 1200;
-        let baseLarge = 1500;
-        let baseTuk = 1100;
-        let baseMiniLorry = 1700;
-        let baseCarrier = 1300;
-        
-        // Adjust based on package weight if available
-        if (packageDetails && packageDetails.weight) {
-            const weight = parseFloat(packageDetails.weight) || 0;
-            if (weight > 5) {
-                baseSmall += weight * 50;
-                baseMedium += weight * 40;
-                baseLarge += weight * 30;
-                baseTuk += weight * 45;
-                baseMiniLorry += weight * 25;
-                baseCarrier += weight * 35;
-            }
+    // Calculate prices when distance or pricing data changes
+    useEffect(() => {
+        if (distance && pricingData) {
+            console.log('🔄 Recalculating prices with new data');
+            const distanceKm = distance || 2; // Distance already in km
+            const calculatedRideOptions = PricingService.calculateAllPrices(distanceKm, pricingData);
+            
+            // Add availability data and icons
+            const rideOptionsWithAvailability = calculatedRideOptions.map(option => ({
+                ...option,
+                available: vehicleAvailability[option.vehicleType] || 0,
+                icon: getVehicleIcon(option.vehicleType)
+            }));
+            
+            setRideOptions(rideOptionsWithAvailability);
+            console.log('💰 Updated ride options:', rideOptionsWithAvailability);
         }
-        
-        // Adjust based on distance
-        if (distance) {
-            const distanceKm = distance / 1000;
-            baseSmall += distanceKm * 30;
-            baseMedium += distanceKm * 25;
-            baseLarge += distanceKm * 20;
-            baseTuk += distanceKm * 28;
-            baseMiniLorry += distanceKm * 22;
-            baseCarrier += distanceKm * 27;
-        }
-        
-        return [
-            { id: 1, name: "Bike", price: baseSmall, icon: require("../assets/icon/bike.png"), vehicleType: "Bike", available: vehicleAvailability.Bike || 0 },
-            { id: 2, name: "Car", price: baseMedium, icon: require("../assets/icon/ez_large.png"), vehicleType: "Car", available: vehicleAvailability.Car || 0 },
-            { id: 3, name: "Lorry", price: baseLarge, icon: require("../assets/icon/ez_xl.png"), vehicleType: "Truck", available: vehicleAvailability.Truck || 0 },
-            { id: 4, name: "Tuk", price: baseTuk, icon: require("../assets/icon/tuk.png"), vehicleType: "Tuk", available: vehicleAvailability.Tuk || 0 },
-            { id: 5, name: "Mini-Lorry", price: baseMiniLorry, icon: require("../assets/icon/mini-truck.png"), vehicleType: "Mini-Lorry", available: vehicleAvailability["Mini-Lorry"] || 0 },
-            { id: 6, name: "Carrier", price: baseCarrier, icon: require("../assets/icon/carrier.png"), vehicleType: "Carrier", available: vehicleAvailability.Carrier || 0 },
-        ];
-    };
+    }, [distance, pricingData, vehicleAvailability]);
 
-    const rideOptions = calculatePrices();
+    const getVehicleIcon = (vehicleType) => {
+        const iconMap = {
+            'Bike': require("../assets/icon/bike.png"),
+            'Car': require("../assets/icon/ez_large.png"),
+            'Truck': require("../assets/icon/ez_xl.png"),
+            'Tuk': require("../assets/icon/tuk.png"),
+            'Mini-Lorry': require("../assets/icon/mini-truck.png"),
+            'Carrier': require("../assets/icon/carrier.png")
+        };
+        return iconMap[vehicleType] || require("../assets/icon/bike.png");
+    };
 
     const getRandomLocation = (latitude, longitude, range = 0.05) => {
         const randomLat = latitude + (Math.random() - 0.5) * range;
@@ -359,6 +356,13 @@ const FindRide = () => {
                                 <Text className="text-gray-500 text-sm">{courierDetails.branchNumber}</Text>
                             </View>
                         </View>
+                        {pricingData?.isDefault && (
+                            <View className="mt-2 p-2 bg-yellow-50 rounded-lg">
+                                <Text className="text-yellow-700 text-xs">
+                                    ⚠️ Using default pricing rates
+                                </Text>
+                            </View>
+                        )}
                     </Animated.View>
                 </View>
             )}

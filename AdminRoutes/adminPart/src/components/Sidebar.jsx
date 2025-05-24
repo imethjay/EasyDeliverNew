@@ -22,6 +22,11 @@ const Sidebar = ({ onLogout }) => {
               Create Courier
             </Link>
           </li>
+          <li>
+            <Link to="/pricing">
+              Pricing Management
+            </Link>
+          </li>
         </ul>
       </nav>
       

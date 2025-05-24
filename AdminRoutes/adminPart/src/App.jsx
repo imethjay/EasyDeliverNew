@@ -6,6 +6,7 @@ import Dashboard from './components/Dashboard';
 import CouriersList from './components/CouriersList';
 import CourierDetails from './components/CourierDetails';
 import CreateCourier from './components/CreateCourier';
+import PricingManagement from './components/PricingManagement';
 import './App.css';
 
 function App() {
@@ -45,6 +46,7 @@ function App() {
             <Route path="/couriers" element={<CouriersList />} />
             <Route path="/courier/:id" element={<CourierDetails />} />
             <Route path="/create-courier" element={<CreateCourier />} />
+            <Route path="/pricing" element={<PricingManagement />} />
             <Route path="*" element={<Navigate to="/dashboard" />} />
           </Routes>
         </div>

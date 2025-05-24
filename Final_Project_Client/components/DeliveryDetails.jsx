@@ -232,7 +232,7 @@ const DeliveryDetails = ({ route, navigation }) => {
             <Text className="ml-3 text-gray-800">
               <Text className="font-medium">Cost: </Text>
               <Text className="text-green-600 font-bold">
-                ${orderData?.rideDetails?.cost || orderData?.packageDetails?.cost || '0.00'}
+                LKR {orderData?.rideDetails?.price || orderData?.packageDetails?.cost || '0.00'}
               </Text>
             </Text>
           </View>
