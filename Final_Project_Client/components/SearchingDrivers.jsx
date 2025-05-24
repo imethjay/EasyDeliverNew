@@ -45,8 +45,14 @@ const SearchingDrivers = () => {
           selectedCourier, 
           vehicleType: rideDetails?.vehicleType,
           packageDetails: !!packageDetails,
-          courierDetails: !!courierDetails 
+          courierDetails: !!courierDetails,
+          isScheduled: packageDetails?.deliveryOption === "Schedule for later"
         });
+
+        // Check if this is a scheduled delivery
+        const isScheduled = packageDetails?.deliveryOption === "Schedule for later";
+        const scheduledDateTime = packageDetails?.scheduledDateTime;
+        const scheduledTimestamp = packageDetails?.scheduledTimestamp;
 
         // Create a new ride request document
         const requestData = {
@@ -57,15 +63,32 @@ const SearchingDrivers = () => {
           distance,
           duration,
           customerId: auth.currentUser?.uid,
-          status: 'searching',
+          status: isScheduled ? 'scheduled' : 'searching',
+          deliveryStatus: isScheduled ? 'scheduled' : 'pending',
+          isScheduled: isScheduled,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp()
         };
+
+        // Add scheduling information if this is a scheduled delivery
+        if (isScheduled && scheduledDateTime && scheduledTimestamp) {
+          requestData.scheduledDateTime = scheduledDateTime;
+          requestData.scheduledTimestamp = scheduledTimestamp;
+          requestData.scheduledPickupTime = scheduledDateTime;
+          
+          // Generate a 4-digit PIN for package collection
+          const deliveryPin = Math.floor(1000 + Math.random() * 9000).toString();
+          requestData.deliveryPin = deliveryPin;
+          
+          console.log('📅 SCHEDULED DELIVERY created with PIN:', deliveryPin);
+        }
         
         console.log('🚀 CREATING RIDE REQUEST with exact data:', {
           selectedCourier: requestData.selectedCourier,
           vehicleType: requestData.rideDetails?.vehicleType,
           status: requestData.status,
+          isScheduled: requestData.isScheduled,
+          scheduledDateTime: requestData.scheduledDateTime,
           fullRideDetails: requestData.rideDetails,
           packageDetails: requestData.packageDetails
         });
@@ -75,6 +98,7 @@ const SearchingDrivers = () => {
           dropoffLocation: packageDetails?.dropoffLocation,
           packageName: packageDetails?.packageName,
           trackingId: packageDetails?.trackingId,
+          deliveryOption: packageDetails?.deliveryOption,
           fullPackageDetails: packageDetails
         });
         
@@ -83,11 +107,20 @@ const SearchingDrivers = () => {
         console.log('✅ Ride request created with ID:', newRideRequestId);
         setRideRequestId(newRideRequestId);
         
-        // Start searching for drivers
-        searchForDrivers(newRideRequestId);
+        // Handle scheduled vs immediate delivery flow
+        if (isScheduled) {
+          // For scheduled deliveries, show confirmation and navigation
+          setSearchStatus('Delivery scheduled successfully!');
+          setTimeout(() => {
+            navigation.navigate('MyOrder');
+          }, 2000);
+        } else {
+          // For immediate deliveries, start searching for drivers
+          searchForDrivers(newRideRequestId);
+        }
       } catch (error) {
         console.error('Error creating ride request:', error);
-        setSearchStatus('Error finding drivers. Please try again.');
+        setSearchStatus('Error creating delivery request. Please try again.');
       }
     };
 

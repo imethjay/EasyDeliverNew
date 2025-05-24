@@ -12,6 +12,8 @@ import { FontAwesome } from "@expo/vector-icons";
 import { collection, query, where, orderBy, onSnapshot } from "firebase/firestore";
 import { auth, db } from "../firebase/init";
 import { widthPercentageToDP as wp, heightPercentageToDP as hp } from "react-native-responsive-screen";
+import { getDeliveryStatusDisplay, formatScheduledTime, safeConvertToDate } from "../utils/helpers";
+import ScheduledDeliveryService from "../utils/ScheduledDeliveryService";
 
 const MyOrder = ({ navigation }) => {
   const [selectedTab, setSelectedTab] = useState("All");
@@ -28,15 +30,24 @@ const MyOrder = ({ navigation }) => {
       { icon: require("../assets/icon/profile.png"), label: "Account", screen: "Profile" },
   ];
 
-  // Get current user UID
+  // Get current user UID and start scheduled delivery monitoring
   useEffect(() => {
     const user = auth.currentUser;
     if (user) {
       setUserUID(user.uid);
+      // Start monitoring scheduled deliveries for automatic activation
+      ScheduledDeliveryService.startMonitoring(user.uid);
     } else {
       console.log('No authenticated user found');
       setLoading(false);
     }
+    
+    // Cleanup when component unmounts
+    return () => {
+      if (user) {
+        ScheduledDeliveryService.stopMonitoring(user.uid);
+      }
+    };
   }, []);
 
   // Fetch real-time ride requests for the current user
@@ -57,92 +68,119 @@ const MyOrder = ({ navigation }) => {
         snapshot.forEach((doc) => {
           const data = doc.data();
           
-          // Map delivery status to display status
-          const getDisplayStatus = (deliveryStatus) => {
-            switch (deliveryStatus) {
-              case 'accepted':
-                return { 
-                  status: 'On Process', 
-                  description: 'Driver assigned and heading to pickup', 
-                  color: 'text-blue-500',
-                  progress: 25
-                };
-              case 'collecting':
-                return { 
-                  status: 'On Process', 
-                  description: 'Driver collecting package', 
-                  color: 'text-orange-500',
-                  progress: 50
-                };
-              case 'in_transit':
-                return { 
-                  status: 'On Process', 
-                  description: 'Package in transit to destination', 
-                  color: 'text-blue-500',
-                  progress: 75
-                };
-              case 'delivered':
-                return { 
-                  status: 'Delivered', 
-                  description: 'Package delivered successfully', 
-                  color: 'text-green-500',
-                  progress: 100
-                };
-              case 'cancelled':
-                return { 
-                  status: 'Cancelled', 
-                  description: 'Delivery cancelled', 
-                  color: 'text-red-500',
-                  progress: 0
-                };
-              default:
-                return { 
-                  status: 'Pending', 
-                  description: 'Searching for available driver', 
-                  color: 'text-yellow-500',
-                  progress: 10
-                };
+          // Safely convert scheduled date/time
+          const getScheduledDateTime = (data) => {
+            return safeConvertToDate(data.scheduledDateTime || data.scheduledTimestamp);
+          };
+
+          const scheduledDateTime = getScheduledDateTime(data);
+          
+          // Use enhanced status display logic that handles scheduled deliveries
+          const statusInfo = getDeliveryStatusDisplay(
+            data.status, 
+            data.deliveryStatus, 
+            scheduledDateTime
+          );
+
+          // Map status colors to proper Tailwind CSS classes
+          const getStatusColorClass = (color) => {
+            switch (color) {
+              case '#3B82F6': return 'text-blue-500';
+              case '#F59E0B': return 'text-yellow-500';
+              case '#10B981': return 'text-green-500';
+              case '#059669': return 'text-green-600';
+              case '#EF4444': return 'text-red-500';
+              case '#6B7280': return 'text-gray-500';
+              default: return 'text-gray-500';
             }
           };
 
-          const displayStatus = getDisplayStatus(data.deliveryStatus || 'pending');
-
-          // Calculate estimated delivery time
-          const getEstimatedDelivery = (deliveryStatus, createdAt) => {
+          // Enhanced estimated delivery calculation for scheduled orders
+          const getEstimatedDelivery = (status, deliveryStatus, createdAt, scheduledDateTime) => {
+            // For scheduled deliveries
+            if (status === 'scheduled' || deliveryStatus === 'scheduled') {
+              if (scheduledDateTime) {
+                try {
+                  return formatScheduledTime(scheduledDateTime);
+                } catch (error) {
+                  console.warn('Error formatting scheduled time:', error);
+                  return 'Scheduled delivery';
+                }
+              }
+              return 'Scheduled delivery';
+            }
+            
             if (!createdAt) return 'Calculating...';
             
-            const now = new Date();
-            const created = createdAt.toDate();
-            const timePassed = now - created;
-            
-            switch (deliveryStatus) {
-              case 'accepted':
-                const eta = new Date(created.getTime() + 90 * 60 * 1000); // 90 minutes from creation
-                return eta > now ? `ETA: ${eta.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}` : 'Updating...';
-              case 'collecting':
-                const collectEta = new Date(now.getTime() + 60 * 60 * 1000); // 60 minutes from now
-                return `ETA: ${collectEta.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
-              case 'in_transit':
-                const transitEta = new Date(now.getTime() + 45 * 60 * 1000); // 45 minutes from now
-                return `ETA: ${transitEta.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
-              case 'delivered':
-                return `Delivered at ${created.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
-              default:
-                return 'Pending assignment';
+            try {
+              const now = new Date();
+              const created = createdAt.toDate ? createdAt.toDate() : new Date(createdAt);
+              
+              if (isNaN(created.getTime())) {
+                return 'Calculating...';
+              }
+              
+              switch (deliveryStatus) {
+                case 'accepted':
+                  const eta = new Date(created.getTime() + 90 * 60 * 1000);
+                  return eta > now ? `ETA: ${eta.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}` : 'Updating...';
+                case 'collecting':
+                  const collectEta = new Date(now.getTime() + 60 * 60 * 1000);
+                  return `ETA: ${collectEta.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+                case 'in_transit':
+                  const transitEta = new Date(now.getTime() + 45 * 60 * 1000);
+                  return `ETA: ${transitEta.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+                case 'delivered':
+                  return `Delivered at ${created.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+                default:
+                  return 'Pending assignment';
+              }
+            } catch (error) {
+              console.warn('Error calculating estimated delivery:', error);
+              return 'Calculating...';
             }
           };
+
+          // Calculate progress for scheduled deliveries
+          const getProgress = (status, deliveryStatus) => {
+            if (status === 'scheduled' || deliveryStatus === 'scheduled') {
+              return statusInfo.isReady ? 15 : 5; // 15% if ready, 5% if still scheduled
+            }
+            
+            switch (deliveryStatus) {
+              case 'accepted': return 25;
+              case 'collecting': return 50;
+              case 'in_transit': return 75;
+              case 'delivered': return 100;
+              case 'cancelled': return 0;
+              default: return 10;
+            }
+          };
+
+          // Safely get creation date for display
+          const getCreationDate = (createdAt) => {
+            return safeConvertToDate(createdAt);
+          };
+
+          const creationDate = getCreationDate(data.createdAt);
 
           ordersData.push({
             id: doc.id,
             trackingNumber: doc.id.substring(0, 10).toUpperCase(),
-            status: displayStatus.status,
-            description: displayStatus.description,
-            color: displayStatus.color,
-            progress: displayStatus.progress,
-            estimatedDelivery: getEstimatedDelivery(data.deliveryStatus, data.createdAt),
+            status: statusInfo.text.includes('Scheduled') ? 'Scheduled' : 
+                    statusInfo.text.includes('Delivered') ? 'Delivered' :
+                    statusInfo.text.includes('Cancelled') ? 'Cancelled' : 'On Process',
+            description: statusInfo.text,
+            color: getStatusColorClass(statusInfo.color),
+            progress: getProgress(data.status, data.deliveryStatus),
+            estimatedDelivery: getEstimatedDelivery(data.status, data.deliveryStatus, data.createdAt, scheduledDateTime),
             deliveryStatus: data.deliveryStatus || 'pending',
             isRated: data.isRated || false,
             customerRating: data.customerRating || null,
+            isScheduled: data.status === 'scheduled' || data.deliveryStatus === 'scheduled',
+            scheduledDateTime: scheduledDateTime,
+            creationDate: creationDate,
+            deliveryPin: data.deliveryPin,
             // Include full data for navigation
             fullData: {
               ...data,
@@ -169,7 +207,7 @@ const MyOrder = ({ navigation }) => {
     };
   }, [userUID]);
 
-  const tabs = ["All", "Pending", "On Process", "Delivered"];
+  const tabs = ["All", "Scheduled", "Pending", "On Process", "Delivered"];
 
   // Filter orders based on selected tab and search text
   const getFilteredOrders = () => {
@@ -215,20 +253,25 @@ const MyOrder = ({ navigation }) => {
     });
   };
 
-  const getOrderIcon = (status, deliveryStatus) => {
+  const getOrderIcon = (status, deliveryStatus, isScheduled) => {
+    // Handle scheduled deliveries first
+    if (isScheduled || status === 'scheduled' || deliveryStatus === 'scheduled') {
+      return '⏰'; // Clock icon for scheduled
+    }
+    
     switch (deliveryStatus) {
       case 'delivered':
-        return '✅';
+        return '✅'; // Green checkmark
       case 'cancelled':
-        return '❌';
-      case 'accepted':
-        return '🚗';
-      case 'collecting':
-        return '📦';
+        return '❌'; // Red X
       case 'in_transit':
-        return '🚛';
+        return '🚚'; // Truck
+      case 'collecting':
+        return '📦'; // Package being collected
+      case 'accepted':
+        return '🚗'; // Car (driver assigned)
       default:
-        return '🔍';
+        return '🔍'; // Search (looking for driver)
     }
   };
 
@@ -347,57 +390,80 @@ const MyOrder = ({ navigation }) => {
               onPress={() => handleOrderPress(item)}
               activeOpacity={0.7}
             >
-              <View className="bg-white mx-4 mt-4 rounded-xl shadow-sm p-4 border border-gray-100">
+              <View className={`mx-4 mt-4 rounded-xl shadow-sm p-4 border ${item.isScheduled ? 'border-blue-300 bg-blue-50' : 'border-gray-100 bg-white'}`}>
+                {/* Scheduled Delivery Banner */}
+                {item.isScheduled && (
+                  <View className="bg-blue-500 rounded-lg p-3 mb-3 flex-row items-center">
+                    <FontAwesome name="clock-o" size={16} color="white" />
+                    <Text className="text-white font-medium text-sm flex-1 ml-2">
+                      Scheduled Delivery
+                    </Text>
+                    {item.deliveryPin && (
+                      <View className="bg-white rounded px-2 py-1">
+                        <Text className="text-blue-600 font-bold text-xs">PIN: {item.deliveryPin}</Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+
                 {/* Header Row */}
-                <View className="flex-row items-center justify-between mb-3">
-                  <View className="flex-row items-center">
-                    <View className="bg-gray-100 rounded-full p-2 mr-3">
-                      <Text className="text-lg">{getOrderIcon(item.status, item.deliveryStatus)}</Text>
+                <View className="flex-row items-start justify-between mb-3">
+                  <View className="flex-row items-center flex-1 mr-2">
+                    <View className={`rounded-full p-2 mr-3 ${item.isScheduled ? 'bg-blue-100' : 'bg-gray-100'}`}>
+                      <Text className="text-lg">{getOrderIcon(item.status, item.deliveryStatus, item.isScheduled)}</Text>
                     </View>
-                    <View>
+                    <View className="flex-1">
                       <Text className="font-semibold text-gray-800">
                         #{item.trackingNumber}
                       </Text>
                       <Text className="text-gray-400 text-xs">
-                        {item.fullData?.createdAt && 
-                          new Date(item.fullData.createdAt.seconds * 1000).toLocaleDateString()
+                        {item.creationDate && 
+                          item.creationDate.toLocaleDateString()
                         }
                       </Text>
                     </View>
                   </View>
-                  <View className="items-end">
-                    <Text className={`font-bold text-sm ${item.color}`}>{item.status}</Text>
-                    <Text className="text-gray-500 text-xs mt-1">{item.estimatedDelivery}</Text>
+                  <View className="items-end flex-shrink-0" style={{ width: '45%' }}>
+                    <Text className={`font-bold text-sm ${item.color} text-right`}>{item.status}</Text>
+                    <Text className={`text-xs mt-1 ${item.isScheduled ? 'text-blue-600 font-medium' : 'text-gray-500'} text-right`} numberOfLines={3}>
+                      {item.estimatedDelivery}
+                    </Text>
                   </View>
                 </View>
 
                 {/* Package Details */}
                 {item.fullData?.packageDetails?.packageName && (
-                  <Text className="text-gray-700 font-medium mb-1">
-                    {item.fullData.packageDetails.packageName}
+                  <Text className="text-gray-700 font-medium mb-2">
+                    📦 {item.fullData.packageDetails.packageName}
                   </Text>
                 )}
                 
                 {/* Route Info */}
                 {item.fullData?.packageDetails && (
-                  <View className="mb-3">
-                    <Text className="text-gray-500 text-sm">
-                      From: {item.fullData.packageDetails.pickupLocation}
-                    </Text>
-                    <Text className="text-gray-500 text-sm">
-                      To: {item.fullData.packageDetails.dropoffLocation}
-                    </Text>
+                  <View className="mb-3 bg-gray-50 rounded-lg p-3">
+                    <View className="flex-row items-center mb-1">
+                      <Text className="text-gray-500 text-sm flex-1">
+                        📍 From: {item.fullData.packageDetails.pickupLocation}
+                      </Text>
+                    </View>
+                    <View className="flex-row items-center">
+                      <Text className="text-gray-500 text-sm flex-1">
+                        🎯 To: {item.fullData.packageDetails.dropoffLocation}
+                      </Text>
+                    </View>
                   </View>
                 )}
 
                 {/* Status Description */}
                 <Text className="text-gray-600 text-sm mb-3">{item.description}</Text>
 
-                {/* Progress Bar - Only for active orders */}
-                {['accepted', 'collecting', 'in_transit'].includes(item.deliveryStatus) && (
-                  <View className="mb-2">
+                {/* Progress Bar - For all orders except cancelled */}
+                {item.deliveryStatus !== 'cancelled' && (
+                  <View className="mb-3">
                     <View className="flex-row justify-between mb-1">
-                      <Text className="text-xs text-gray-500">Progress</Text>
+                      <Text className="text-xs text-gray-500">
+                        {item.isScheduled ? 'Scheduling Progress' : 'Delivery Progress'}
+                      </Text>
                       <Text className="text-xs text-gray-500">{item.progress}%</Text>
                     </View>
                     <View className="bg-gray-200 rounded-full h-2">
@@ -405,19 +471,78 @@ const MyOrder = ({ navigation }) => {
                         className="rounded-full h-2"
                         style={{
                           width: `${item.progress}%`,
-                          backgroundColor: getProgressColor(item.deliveryStatus)
+                          backgroundColor: item.isScheduled ? '#3B82F6' : getProgressColor(item.deliveryStatus)
                         }}
                       />
                     </View>
                   </View>
                 )}
 
+                {/* Scheduled Time Details - Only for scheduled deliveries */}
+                {item.isScheduled && item.scheduledDateTime && (
+                  <View className="bg-blue-100 border border-blue-200 rounded-lg p-3 mb-3">
+                    <View className="flex-row items-center justify-between mb-2">
+                      <View className="flex-row items-center flex-1">
+                        <FontAwesome name="calendar" size={14} color="#1E40AF" />
+                        <Text className="text-blue-800 text-sm font-medium ml-2">Pickup Time:</Text>
+                      </View>
+                      {item.deliveryPin && (
+                        <View className="bg-blue-600 rounded px-2 py-1">
+                          <Text className="text-white text-xs font-bold">PIN: {item.deliveryPin}</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text className="text-blue-700 font-semibold text-sm">
+                      {(() => {
+                        try {
+                          const scheduleDate = item.scheduledDateTime;
+                          if (!scheduleDate || isNaN(scheduleDate.getTime())) {
+                            return 'Date not available';
+                          }
+                          
+                          // Simple format for better readability
+                          const today = new Date();
+                          const isToday = scheduleDate.toDateString() === today.toDateString();
+                          const tomorrow = new Date(today);
+                          tomorrow.setDate(today.getDate() + 1);
+                          const isTomorrow = scheduleDate.toDateString() === tomorrow.toDateString();
+                          
+                          if (isToday) {
+                            return `Today at ${scheduleDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+                          } else if (isTomorrow) {
+                            return `Tomorrow at ${scheduleDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+                          } else {
+                            return scheduleDate.toLocaleDateString('en-US', {
+                              weekday: 'short',
+                              month: 'short',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            });
+                          }
+                        } catch (error) {
+                          console.warn('Error formatting scheduled date:', error);
+                          return 'Date not available';
+                        }
+                      })()}
+                    </Text>
+                    {item.deliveryPin && (
+                      <Text className="text-blue-600 text-xs mt-2">
+                        💡 Share this PIN with the driver for package collection
+                      </Text>
+                    )}
+                  </View>
+                )}
+
                 {/* Driver Info - Only if driver is assigned */}
                 {item.fullData?.driver && (
-                  <View className="bg-gray-50 rounded-lg p-3 mt-2">
-                    <Text className="text-gray-600 text-sm font-medium">Driver Assigned</Text>
-                    <Text className="text-gray-800 font-medium">{item.fullData.driver.fullName || item.fullData.driver.name}</Text>
-                    <Text className="text-gray-500 text-sm">{item.fullData.driver.vehicleNumber || item.fullData.driver.vehicle} • {item.fullData.driver.phoneNumber || item.fullData.driver.phone}</Text>
+                  <View className="bg-green-50 border border-green-200 rounded-lg p-3 mb-3">
+                    <View className="flex-row items-center mb-2">
+                      <FontAwesome name="user" size={14} color="#059669" />
+                      <Text className="text-green-800 text-sm font-medium ml-2">Driver Assigned</Text>
+                    </View>
+                    <Text className="text-green-700 font-semibold">{item.fullData.driver.fullName || item.fullData.driver.name}</Text>
+                    <Text className="text-green-600 text-sm">{item.fullData.driver.vehicleNumber || item.fullData.driver.vehicle} • {item.fullData.driver.phoneNumber || item.fullData.driver.phone}</Text>
                   </View>
                 )}
 
