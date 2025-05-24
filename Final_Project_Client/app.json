@@ -14,17 +14,35 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.final-year-project"
+      "bundleIdentifier": "com.anonymous.final-year-project",
+      "infoPlist": {
+        "NSCameraUsageDescription": "This app needs access to camera to take profile pictures.",
+        "NSPhotoLibraryUsageDescription": "This app needs access to photo library to select profile pictures."
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.anonymous.finalyearproject"
+      "package": "com.anonymous.finalyearproject",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "The app accesses your photos to let you select profile pictures.",
+          "cameraPermission": "The app accesses your camera to let you take profile pictures."
+        }
+      ]
+    ]
   }
 }

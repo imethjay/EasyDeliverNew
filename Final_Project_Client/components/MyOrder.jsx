@@ -7,6 +7,7 @@ import {
   FlatList,
   Image,
   ActivityIndicator,
+  ScrollView,
 } from "react-native";
 import { FontAwesome } from "@expo/vector-icons";
 import { collection, query, where, orderBy, onSnapshot } from "firebase/firestore";
@@ -207,7 +208,7 @@ const MyOrder = ({ navigation }) => {
     };
   }, [userUID]);
 
-  const tabs = ["All", "Scheduled", "Pending", "On Process", "Delivered"];
+  const tabs = ["All", "Scheduled", "Pending", "Active", "Delivered"];
 
   // Filter orders based on selected tab and search text
   const getFilteredOrders = () => {
@@ -216,7 +217,7 @@ const MyOrder = ({ navigation }) => {
     // Filter by tab
     if (selectedTab !== "All") {
       filtered = filtered.filter((order) => {
-        if (selectedTab === "On Process") {
+        if (selectedTab === "Active") {
           return order.status === "On Process";
         }
         return order.status === selectedTab;
@@ -313,25 +314,37 @@ const MyOrder = ({ navigation }) => {
   return (
     <View className="flex-1 bg-white w-full">
       {/* Header */}
-      <View className="bg-[#133BB7] p-6">
-        <Text className="text-white font-bold text-lg">My Orders</Text>
-        <View className="bg-white rounded-[20px] flex-row items-center mt-4 px-4">
+      <View className="bg-[#133BB7] px-6 pt-12 pb-6">
+        <View className="flex-row items-center justify-between mb-4">
+          <Text className="text-white font-bold text-xl">My Orders</Text>
+          <TouchableOpacity 
+            onPress={() => navigation.navigate('CreateDelivery')}
+            className="bg-white/20 rounded-full p-2"
+          >
+            <Text className="text-white text-lg">➕</Text>
+          </TouchableOpacity>
+        </View>
+        <View className="bg-white rounded-2xl flex-row items-center px-4 py-2 shadow-sm">
           <Image
             source={require("../assets/icon/search.png")}
-            style={{ width: 20, height: 20, tintColor: "gray", marginRight: 10 }}
+            style={{ width: 20, height: 20, tintColor: "#9CA3AF", marginRight: 12 }}
             resizeMode="contain"
           />
           <TextInput
-            className="flex-1 h-10 outline-none"
+            className="flex-1 h-10 text-gray-700"
             placeholder="Search by tracking ID or item name"
+            placeholderTextColor="#9CA3AF"
             value={searchText}
             onChangeText={setSearchText}
           />
           {searchText.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchText('')}>
+            <TouchableOpacity 
+              onPress={() => setSearchText('')}
+              className="ml-2 p-1"
+            >
               <Image
                 source={require("../assets/icon/close.png")}
-                style={{ width: 20, height: 20, tintColor: "gray" }}
+                style={{ width: 18, height: 18, tintColor: "#9CA3AF" }}
                 resizeMode="contain"
               />
             </TouchableOpacity>
@@ -340,44 +353,107 @@ const MyOrder = ({ navigation }) => {
       </View>
 
       {/* Tabs */}
-      <View className="flex-row justify-around mt-4 px-4">
-        {tabs.map((tab) => (
-          <TouchableOpacity
-            key={tab}
-            onPress={() => setSelectedTab(tab)}
-            className={`py-2 px-4 rounded-full flex-1 mx-1 ${selectedTab === tab ? "bg-[#133BB7]" : "bg-gray-100"}`}
-          >
-            <Text
-              className={`${selectedTab === tab ? "text-white" : "text-gray-600"} text-sm font-medium text-center`}
+      <View className="mt-2" style={{ height: 64 }}>
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ 
+            paddingHorizontal: 16, 
+            paddingVertical: 12,
+            alignItems: 'center'
+          }}
+        >
+          {tabs.map((tab, index) => (
+            <TouchableOpacity
+              key={tab}
+              onPress={() => setSelectedTab(tab)}
+              className={`py-2 px-4 rounded-2xl ${
+                selectedTab === tab ? "bg-[#133BB7]" : "bg-gray-100"
+              } ${index !== tabs.length - 1 ? "mr-3" : ""}`}
+              style={{
+                height: 40,
+                minWidth: 70,
+                justifyContent: 'center',
+                alignItems: 'center',
+                ...(selectedTab === tab && {
+                  shadowColor: "#133BB7",
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.15,
+                  shadowRadius: 4,
+                  elevation: 3,
+                })
+              }}
             >
-              {tab}
-            </Text>
-          </TouchableOpacity>
-        ))}
+              <Text
+                className={`${
+                  selectedTab === tab ? "text-white font-semibold" : "text-gray-700 font-medium"
+                } text-sm`}
+                numberOfLines={1}
+              >
+                {tab}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
       </View>
 
       {/* Order Count */}
-      <View className="px-4 mt-2">
-        <Text className="text-gray-600 text-sm">
-          {filteredOrders.length} {filteredOrders.length === 1 ? 'order' : 'orders'} found
-        </Text>
+      <View className="px-4 py-2 bg-gray-50 mx-4 rounded-lg mt-3">
+        <View className="flex-row items-center justify-between">
+          <View className="flex-row items-center">
+            <Text className="text-gray-500 text-sm mr-1">📋</Text>
+            <Text className="text-gray-700 text-sm font-medium">
+              {filteredOrders.length} {filteredOrders.length === 1 ? 'order' : 'orders'} found
+            </Text>
+          </View>
+          {selectedTab !== "All" && (
+            <TouchableOpacity 
+              onPress={() => setSelectedTab("All")}
+              className="bg-blue-100 px-3 py-1 rounded-full"
+            >
+              <Text className="text-blue-600 text-xs font-medium">View All</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       {/* Order List */}
       {filteredOrders.length === 0 ? (
-        <View className="flex-1 justify-center items-center">
-          <Text className="text-gray-500 text-lg">📦</Text>
-          <Text className="text-gray-500 mt-2 text-center px-8">
-            {searchText.trim() ? 'No orders match your search' : 'No orders found'}
+        <View className="flex-1 justify-center items-center px-8">
+          <View className="bg-gray-100 rounded-full p-6 mb-4">
+            <Text className="text-gray-400 text-4xl">📦</Text>
+          </View>
+          <Text className="text-gray-700 text-lg font-medium mb-2">
+            {searchText.trim() ? 'No matching orders' : 'No orders found'}
           </Text>
-          {selectedTab !== "All" && (
-            <TouchableOpacity 
-              className="mt-4 bg-[#133BB7] px-4 py-2 rounded-lg"
-              onPress={() => setSelectedTab("All")}
-            >
-              <Text className="text-white">View All Orders</Text>
-            </TouchableOpacity>
-          )}
+          <Text className="text-gray-500 text-center text-sm mb-6">
+            {searchText.trim() 
+              ? `No orders match "${searchText.trim()}"` 
+              : selectedTab === "All" 
+                ? 'You haven\'t placed any orders yet. Start by creating your first delivery!'
+                : `No ${selectedTab.toLowerCase()} orders found`
+            }
+          </Text>
+          <View className="flex-row space-x-3">
+            {selectedTab !== "All" && (
+              <TouchableOpacity 
+                className="bg-[#133BB7] px-6 py-3 rounded-lg flex-row items-center"
+                onPress={() => setSelectedTab("All")}
+              >
+                <Text className="text-white font-medium mr-1">View All Orders</Text>
+                <Text className="text-white">📋</Text>
+              </TouchableOpacity>
+            )}
+            {!searchText.trim() && selectedTab === "All" && (
+              <TouchableOpacity 
+                className="bg-green-500 px-6 py-3 rounded-lg flex-row items-center"
+                onPress={() => navigation.navigate('CreateDelivery')}
+              >
+                <Text className="text-white font-medium mr-1">Create Delivery</Text>
+                <Text className="text-white">➕</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       ) : (
         <FlatList
