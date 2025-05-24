@@ -200,22 +200,19 @@ const MyOrder = ({ navigation }) => {
   const filteredOrders = getFilteredOrders();
 
   const handleOrderPress = (order) => {
-    // Navigate based on order status
-    if (order.status === 'Delivered' || order.status === 'Cancelled') {
-      // Navigate to OrderPreview for completed orders
-      navigation.navigate('TrackingDetails', { order: order.fullData });
-    } else {
-      // Navigate to RiderConfirmed for active orders
-      navigation.navigate('RiderConfirmed', {
-        packageDetails: order.fullData.packageDetails,
-        courierDetails: order.fullData.courierDetails,
-        rideDetails: order.fullData.rideDetails,
-        distance: order.fullData.distance,
-        duration: order.fullData.duration,
-        driver: order.fullData.driver,
-        rideRequestId: order.fullData.rideRequestId
-      });
-    }
+    // Navigate to DeliveryDetails for all orders
+    navigation.navigate('DeliveryDetails', {
+      order: {
+        ...order.fullData,
+        trackingId: order.trackingNumber,
+        item: order.fullData?.packageDetails?.packageName || 'Package',
+        from: order.fullData?.packageDetails?.pickupLocation || 'Unknown',
+        to: order.fullData?.packageDetails?.dropoffLocation || 'Unknown',
+        status: order.description,
+        deliveryStatus: order.deliveryStatus,
+        rideRequestId: order.fullData.rideRequestId || order.id
+      }
+    });
   };
 
   const getOrderIcon = (status, deliveryStatus) => {

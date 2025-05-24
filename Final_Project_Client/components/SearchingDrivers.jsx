@@ -400,10 +400,15 @@ const SearchingDrivers = () => {
           <Text style={styles.retryText}>Refresh Status</Text>
         </TouchableOpacity>
         
-        {searchStatus.includes('Keep waiting') && (
-          <TouchableOpacity style={styles.cancelButton} onPress={handleCancel}>
-            <Text style={styles.cancelText}>Cancel</Text>
-          </TouchableOpacity>
+        {/* Always show cancel button for pending searches */}
+        <TouchableOpacity style={styles.cancelButton} onPress={handleCancel}>
+          <Text style={styles.cancelText}>Cancel Delivery</Text>
+        </TouchableOpacity>
+        
+        {searchTime > 30 && (
+          <Text style={styles.helpText}>
+            Taking longer than expected? You can cancel and try again later.
+          </Text>
         )}
       </View>
     </View>
@@ -506,6 +511,13 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: 'bold',
     fontSize: 16,
+  },
+  helpText: {
+    color: '#666',
+    textAlign: 'center',
+    marginTop: 16,
+    fontSize: 14,
+    paddingHorizontal: 20,
   },
 });
 

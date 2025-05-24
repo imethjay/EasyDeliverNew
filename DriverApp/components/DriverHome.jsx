@@ -463,7 +463,7 @@ const DriverHome = () => {
         declinedDrivers: arrayUnion({
           driverId: driver.id,
           driverName: driver.fullName,
-          declinedAt: serverTimestamp()
+          declinedAt: new Date()
         }),
         updatedAt: serverTimestamp()
       });

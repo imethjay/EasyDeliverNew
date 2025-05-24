@@ -152,21 +152,19 @@ const HomePage = () => {
 
   // Handle tracking history item press
   const handleTrackingItemPress = (item) => {
-    if (['accepted', 'collecting', 'in_transit'].includes(item.deliveryStatus)) {
-      // Navigate to RiderConfirmed for active orders
-      navigation.navigate('RiderConfirmed', {
-        packageDetails: item.fullData.packageDetails,
-        courierDetails: item.fullData.courierDetails,
-        rideDetails: item.fullData.rideDetails,
-        distance: item.fullData.distance,
-        duration: item.fullData.duration,
-        driver: item.fullData.driver,
-        rideRequestId: item.fullData.rideRequestId
-      });
-    } else {
-      // Navigate to OrderPreview for completed orders
-      navigation.navigate('TrackingDetails', { order: item.fullData });
-    }
+    // Navigate to DeliveryDetails for all orders
+    navigation.navigate('DeliveryDetails', {
+      order: {
+        ...item.fullData,
+        trackingId: item.trackingId,
+        item: item.item,
+        from: item.from,
+        to: item.to,
+        status: item.status,
+        deliveryStatus: item.deliveryStatus,
+        rideRequestId: item.fullData.rideRequestId || item.id
+      }
+    });
   };
   
 
