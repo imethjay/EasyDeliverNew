@@ -338,6 +338,121 @@ class DriverService {
       return `${months}mo ago`;
     }
   }
+
+  /**
+   * Get detailed earnings data for the driver
+   */
+  static async getDriverEarnings(driverId) {
+    try {
+      console.log('💰 Fetching detailed earnings for:', driverId);
+      
+      const rideRequestsRef = collection(db, 'rideRequests');
+      const q = query(
+        rideRequestsRef, 
+        where('driverId', '==', driverId),
+        where('status', '==', 'completed'),
+        limit(100)
+      );
+      
+      const querySnapshot = await getDocs(q);
+      const earnings = {
+        totalEarnings: 0,
+        completedTrips: 0,
+        weeklyEarnings: [],
+        monthlyEarnings: [],
+        averagePerTrip: 0,
+        recentEarnings: []
+      };
+      
+      const now = new Date();
+      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      
+      querySnapshot.forEach(doc => {
+        const data = doc.data();
+        const fare = data.fare || data.price || 0;
+        const completedAt = data.completedAt?.toDate() || data.createdAt?.toDate();
+        
+        earnings.totalEarnings += fare;
+        earnings.completedTrips++;
+        
+        if (completedAt && completedAt >= weekAgo) {
+          earnings.weeklyEarnings.push({
+            amount: fare,
+            date: completedAt,
+            tripId: doc.id
+          });
+        }
+        
+        if (completedAt && completedAt >= monthAgo) {
+          earnings.monthlyEarnings.push({
+            amount: fare,
+            date: completedAt,
+            tripId: doc.id
+          });
+        }
+        
+        earnings.recentEarnings.push({
+          amount: fare,
+          date: completedAt || new Date(),
+          tripId: doc.id,
+          customerName: data.customerName || 'Customer',
+          pickupLocation: data.packageDetails?.pickupLocation || 'Unknown'
+        });
+      });
+      
+      earnings.averagePerTrip = earnings.completedTrips > 0 
+        ? Math.round(earnings.totalEarnings / earnings.completedTrips) 
+        : 0;
+      
+      // Sort recent earnings by date (most recent first)
+      earnings.recentEarnings.sort((a, b) => b.date - a.date);
+      earnings.recentEarnings = earnings.recentEarnings.slice(0, 10);
+      
+      console.log(`✅ Total earnings: $${earnings.totalEarnings} from ${earnings.completedTrips} trips`);
+      
+      return earnings;
+    } catch (error) {
+      console.error('Error fetching earnings:', error);
+      return {
+        totalEarnings: 0,
+        completedTrips: 0,
+        weeklyEarnings: [],
+        monthlyEarnings: [],
+        averagePerTrip: 0,
+        recentEarnings: []
+      };
+    }
+  }
+
+  /**
+   * Update driver profile with image upload support
+   */
+  static async updateDriverProfileWithImage(driverId, updateData) {
+    try {
+      const driverRef = doc(db, 'drivers', driverId);
+      
+      // Handle profile image separately if it's base64
+      const updatePayload = {
+        ...updateData,
+        updatedAt: new Date()
+      };
+      
+      // If profile image is base64, we'll store it directly
+      // In a production app, you might want to upload to Firebase Storage
+      if (updateData.profileImage && updateData.profileImage.startsWith('data:image')) {
+        updatePayload.profileImage = updateData.profileImage;
+      }
+      
+      await updateDoc(driverRef, updatePayload);
+      
+      console.log('✅ Driver profile updated successfully');
+      return true;
+    } catch (error) {
+      console.error('Error updating driver profile with image:', error);
+      throw error;
+    }
+  }
 }
 
 export default DriverService; 

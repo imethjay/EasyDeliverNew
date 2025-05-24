@@ -217,20 +217,12 @@ const ChatList = () => {
                     keyExtractor={(item) => item.id}
                     renderItem={renderChatItem}
                     showsVerticalScrollIndicator={false}
-                    contentContainerStyle={{ paddingBottom: 100 }}
+                    contentContainerStyle={{ paddingBottom: 20 }}
                 />
             )}
 
             {/* Bottom Navigation */}
-            <View
-                className="flex-row justify-between bg-white px-8 py-4 border-t border-gray-200"
-                style={{
-                    position: "absolute",
-                    bottom: 0,
-                    width: "100%",
-                    backgroundColor: "white",
-                }}
-            >
+            <View className="flex-row w-full justify-between gap-5 bg-white px-8 py-4 border-t border-gray-200">
                 {menuItems.map((item, index) => (
                     <TouchableOpacity
                         key={index}
