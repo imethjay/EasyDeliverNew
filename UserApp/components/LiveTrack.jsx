@@ -3,7 +3,7 @@ import { View, Text, Image, TouchableOpacity, Dimensions, Alert, ActivityIndicat
 import MapView, { Marker } from "react-native-maps";
 import { Ionicons, FontAwesome } from "@expo/vector-icons";
 import * as Location from "expo-location";
-import { collection, query, where, orderBy, limit, onSnapshot } from "firebase/firestore";
+import { collection, query, where, orderBy, limit, onSnapshot, doc } from "firebase/firestore";
 import { ref, onValue, off } from "firebase/database";
 import { auth, db, rtdb } from "../firebase/init";
 
@@ -108,22 +108,34 @@ const LiveTrack = ({ navigation, route }) => {
     // Listen to real-time driver location if we have an active order
     useEffect(() => {
         if (!currentOrder?.rideRequestId || !currentOrder?.driver?.id) {
+            console.log('⚠️ Missing order data for location tracking:', {
+                hasOrder: !!currentOrder,
+                rideRequestId: currentOrder?.rideRequestId,
+                driverId: currentOrder?.driver?.id
+            });
             return;
         }
 
         console.log('🚗 Setting up driver location listener for:', {
             rideRequestId: currentOrder.rideRequestId,
-            driverId: currentOrder.driver.id
+            driverId: currentOrder.driver.id,
+            path: `driverLocations/${currentOrder.rideRequestId}/${currentOrder.driver.id}`
         });
 
+        // Primary: Listen to Firebase Realtime Database
         const locationRef = ref(rtdb, `driverLocations/${currentOrder.rideRequestId}/${currentOrder.driver.id}`);
         
         const locationListener = onValue(locationRef, (snapshot) => {
             try {
                 const locationData = snapshot.val();
                 
-                if (locationData) {
-                    console.log('📍 Received driver location update:', locationData);
+                if (locationData && locationData.latitude && locationData.longitude) {
+                    console.log('📍 Received driver location update from Realtime DB:', {
+                        latitude: locationData.latitude,
+                        longitude: locationData.longitude,
+                        timestamp: locationData.timestamp,
+                        accuracy: locationData.accuracy
+                    });
                     setDriverLocation({
                         latitude: locationData.latitude,
                         longitude: locationData.longitude,
@@ -131,20 +143,74 @@ const LiveTrack = ({ navigation, route }) => {
                         speed: locationData.speed || 0
                     });
                 } else {
-                    console.log('⚠️ No driver location data available');
-                    setDriverLocation(null);
+                    console.log('⚠️ No driver location data available in Realtime DB, checking Firestore...');
+                    // Fallback to Firestore if Realtime DB has no data
+                    checkFirestoreLocation();
                 }
             } catch (error) {
-                console.error('❌ Error processing driver location update:', error);
+                console.error('❌ Error processing driver location update from Realtime DB:', error);
+                // Try Firestore as fallback
+                checkFirestoreLocation();
             }
         }, (error) => {
-            console.error('❌ Error listening to driver location:', error);
+            console.error('❌ Error listening to driver location in Realtime DB:', error);
+            console.log('🔄 Falling back to Firestore location tracking...');
+            // Try Firestore as fallback
+            checkFirestoreLocation();
         });
+
+        // Fallback: Check Firestore for driver location
+        const checkFirestoreLocation = async () => {
+            try {
+                const rideRequestRef = doc(db, 'rideRequests', currentOrder.rideRequestId);
+                const unsubscribeFirestore = onSnapshot(rideRequestRef, (doc) => {
+                    if (doc.exists()) {
+                        const data = doc.data();
+                        const firestoreLocation = data.currentDriverLocation;
+                        
+                        if (firestoreLocation && firestoreLocation.latitude && firestoreLocation.longitude) {
+                            console.log('📍 Received driver location update from Firestore:', {
+                                latitude: firestoreLocation.latitude,
+                                longitude: firestoreLocation.longitude,
+                                updatedAt: firestoreLocation.updatedAt
+                            });
+                            setDriverLocation({
+                                latitude: firestoreLocation.latitude,
+                                longitude: firestoreLocation.longitude,
+                                heading: firestoreLocation.heading || 0,
+                                speed: 0
+                            });
+                        } else {
+                            console.log('⚠️ No driver location data available in Firestore either');
+                            setDriverLocation(null);
+                        }
+                    }
+                }, (error) => {
+                    console.error('❌ Error listening to Firestore location:', error);
+                    setDriverLocation(null);
+                });
+
+                // Store the unsubscribe function for cleanup
+                return unsubscribeFirestore;
+            } catch (error) {
+                console.error('❌ Error setting up Firestore location listener:', error);
+                setDriverLocation(null);
+            }
+        };
+
+        // Set up periodic location check as additional fallback
+        const locationCheckInterval = setInterval(() => {
+            if (!driverLocation) {
+                console.log('🔄 No location received, checking again...');
+                checkFirestoreLocation();
+            }
+        }, 10000); // Check every 10 seconds if no location
 
         return () => {
             try {
-                console.log('🧹 Cleaning up driver location listener');
+                console.log('🧹 Cleaning up driver location listeners');
                 off(locationRef, 'value', locationListener);
+                clearInterval(locationCheckInterval);
             } catch (error) {
                 console.error('❌ Error cleaning up location listener:', error);
             }
@@ -393,6 +459,26 @@ const LiveTrack = ({ navigation, route }) => {
                         {driverLocation ? 'Live location active' : 'Location unavailable'}
                     </Text>
                 </View>
+
+                {/* Debug Information (only show when location is unavailable) */}
+                {!driverLocation && currentOrder && (
+                    <View className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <Text className="text-yellow-800 font-semibold text-sm mb-2">🔍 Debug Information:</Text>
+                        <Text className="text-yellow-700 text-xs">Order ID: {currentOrder.rideRequestId || 'N/A'}</Text>
+                        <Text className="text-yellow-700 text-xs">Driver ID: {currentOrder.driver?.id || 'N/A'}</Text>
+                        <Text className="text-yellow-700 text-xs">Driver Name: {currentOrder.driver?.fullName || 'N/A'}</Text>
+                        <Text className="text-yellow-700 text-xs">Delivery Status: {currentOrder.deliveryStatus || 'N/A'}</Text>
+                        <Text className="text-yellow-700 text-xs">
+                            Expected Path: driverLocations/{currentOrder.rideRequestId}/{currentOrder.driver?.id}
+                        </Text>
+                        <Text className="text-yellow-600 text-xs mt-2">
+                            💡 If this persists, ask the driver to restart their app or check location permissions.
+                        </Text>
+                        <Text className="text-yellow-600 text-xs">
+                            🔧 Driver should ensure location tracking is enabled and they are online.
+                        </Text>
+                    </View>
+                )}
             </View>
         </View>
     );

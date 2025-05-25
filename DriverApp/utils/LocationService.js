@@ -71,6 +71,7 @@ class LocationService {
     }
 
     console.log('🚀 Starting location tracking process...', { rideId, driverId });
+    console.log('📍 Location will be stored at path:', `driverLocations/${rideId}/${driverId}`);
 
     const hasPermission = await this.requestPermissions();
     if (!hasPermission) {
@@ -97,7 +98,8 @@ class LocationService {
           console.log('📍 New location received:', {
             lat: location.coords.latitude,
             lng: location.coords.longitude,
-            accuracy: location.coords.accuracy
+            accuracy: location.coords.accuracy,
+            path: `driverLocations/${this.currentRideId}/${this.driverId}`
           });
           this.updateDriverLocation(location);
         }
@@ -125,7 +127,7 @@ class LocationService {
   // Update driver location in Firebase Realtime Database
   async updateDriverLocation(location) {
     if (!this.currentRideId || !this.driverId || !location) {
-      console.log('Missing required data for location update:', {
+      console.log('❌ Missing required data for location update:', {
         rideId: this.currentRideId,
         driverId: this.driverId,
         hasLocation: !!location
@@ -152,40 +154,75 @@ class LocationService {
         longitude: location.coords.longitude,
         rideId: this.currentRideId,
         driverId: this.driverId,
-        accuracy: location.coords.accuracy
+        accuracy: location.coords.accuracy,
+        path: `driverLocations/${this.currentRideId}/${this.driverId}`
       });
+
+      // Also update in Firestore as backup
+      try {
+        const { db } = require('../firebase/init');
+        const { doc, updateDoc } = require('firebase/firestore');
+        
+        const rideRequestRef = doc(db, 'rideRequests', this.currentRideId);
+        await updateDoc(rideRequestRef, {
+          currentDriverLocation: {
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+            heading: location.coords.heading || 0,
+            updatedAt: new Date().toISOString(),
+            timestamp: Date.now()
+          }
+        });
+        console.log('✅ Driver location also updated in Firestore as backup');
+      } catch (firestoreError) {
+        console.log('⚠️ Firestore backup update failed (non-critical):', firestoreError.message);
+      }
+
     } catch (error) {
       console.error('❌ Error updating driver location:', error);
-      // Try to reconnect or handle Firebase issues
+      
+      // Detailed error logging
       if (error.code === 'permission-denied') {
-        console.error('Firebase permission denied - check database rules');
-        // Add useful warning
+        console.error('🚫 Firebase permission denied - check database rules');
         console.warn('⚠️ Firebase realtime database rules need to be updated. Go to Firebase Console and set:');
         console.warn('"driverLocations": {');
         console.warn('  ".read": "auth != null",');
         console.warn('  ".write": "auth != null"');
         console.warn('}');
+      } else if (error.code === 'network-error') {
+        console.error('🌐 Network error - check internet connection');
+      } else {
+        console.error('🔥 Firebase error details:', {
+          code: error.code,
+          message: error.message,
+          path: `driverLocations/${this.currentRideId}/${this.driverId}`
+        });
+      }
+
+      // Try alternative - store in Firestore instead as fallback
+      try {
+        const { db } = require('../firebase/init');
+        const { doc, updateDoc } = require('firebase/firestore');
+        console.log('🔄 Trying alternative Firestore update as fallback');
         
-        // Try alternative - store in Firestore instead as fallback
-        try {
-          const { db } = require('../firebase/init');
-          const { doc, updateDoc } = require('firebase/firestore');
-          console.log('🔄 Trying alternative Firestore update as fallback');
-          
-          // Update the rideRequest with location
-          const rideRequestRef = doc(db, 'rideRequests', this.currentRideId);
-          await updateDoc(rideRequestRef, {
-            currentDriverLocation: {
-              latitude: location.coords.latitude,
-              longitude: location.coords.longitude,
-              heading: location.coords.heading || 0,
-              updatedAt: new Date().toISOString()
-            }
-          });
-          console.log('✅ Driver location updated via Firestore instead');
-        } catch (fbError) {
-          console.error('❌ Firestore fallback failed:', fbError);
-        }
+        // Update the rideRequest with location
+        const rideRequestRef = doc(db, 'rideRequests', this.currentRideId);
+        await updateDoc(rideRequestRef, {
+          currentDriverLocation: {
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+            heading: location.coords.heading || 0,
+            updatedAt: new Date().toISOString()
+          }
+        });
+        console.log('✅ Driver location updated via Firestore instead');
+      } catch (fbError) {
+        console.error('❌ Firestore fallback failed:', fbError);
+        Alert.alert(
+          'Location Update Failed',
+          'Unable to update your location. Please check your internet connection and try again.',
+          [{ text: 'OK' }]
+        );
       }
     }
   }
@@ -224,6 +261,41 @@ class LocationService {
       rideId: this.currentRideId,
       driverId: this.driverId
     };
+  }
+
+  // NEW: Diagnostic function to check current state
+  getDiagnosticInfo() {
+    const status = {
+      isTracking: this.isTracking,
+      currentRideId: this.currentRideId,
+      driverId: this.driverId,
+      hasWatchId: !!this.watchId,
+      timestamp: new Date().toISOString()
+    };
+    
+    console.log('📊 LocationService Diagnostic Info:', status);
+    return status;
+  }
+
+  // NEW: Force restart location tracking for existing delivery
+  async restartTrackingForCurrentRide() {
+    if (!this.currentRideId || !this.driverId) {
+      console.log('❌ No current ride to restart tracking for');
+      return false;
+    }
+
+    console.log('🔄 Restarting location tracking for current ride:', {
+      rideId: this.currentRideId,
+      driverId: this.driverId
+    });
+
+    // Stop current tracking if active
+    if (this.isTracking) {
+      await this.stopTracking();
+    }
+
+    // Restart tracking
+    return await this.startTracking(this.currentRideId, this.driverId);
   }
 }
 

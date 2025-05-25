@@ -299,9 +299,21 @@ const RiderConfirmed = () => {
 
     // Listen for real-time driver location updates
     useEffect(() => {
-        if (!driver?.uid || !rideRequestId) return;
+        if (!driver?.id || !rideRequestId) {
+            console.log('⚠️ Missing required data for driver location tracking:', {
+                driverId: driver?.id,
+                rideRequestId: rideRequestId
+            });
+            return;
+        }
 
-        const driverLocationRef = ref(rtdb, `driverLocations/${driver.uid}`);
+        console.log('🚗 Setting up driver location listener for:', {
+            rideRequestId: rideRequestId,
+            driverId: driver.id,
+            path: `driverLocations/${rideRequestId}/${driver.id}`
+        });
+
+        const driverLocationRef = ref(rtdb, `driverLocations/${rideRequestId}/${driver.id}`);
         
         const unsubscribe = onValue(driverLocationRef, (snapshot) => {
             try {
@@ -330,7 +342,7 @@ const RiderConfirmed = () => {
         return () => {
             off(driverLocationRef, 'value', unsubscribe);
         };
-    }, [driver?.uid, rideRequestId]);
+    }, [driver?.id, rideRequestId]);
 
     const handleCallDriver = () => {
         if (driver && driver.phoneNumber) {

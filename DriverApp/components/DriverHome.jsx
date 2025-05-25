@@ -98,6 +98,24 @@ const DriverHome = () => {
           console.log('🔄 Driver is now online - starting request manager');
           DeliveryRequestManager.initialize(updatedDriver, handleNewDeliveryRequest);
           DeliveryRequestManager.startListening();
+
+          // NEW: Auto-recovery for active deliveries without location tracking
+          if (updatedDriver.currentRideId && !LocationService.getTrackingStatus().isTracking) {
+            console.log('🔧 Auto-recovery: Driver has active delivery but no location tracking');
+            console.log('📍 Starting location tracking for existing delivery:', updatedDriver.currentRideId);
+            
+            try {
+              await LocationService.startTracking(updatedDriver.currentRideId, updatedDriver.id);
+              console.log('✅ Auto-recovery successful: Location tracking started');
+            } catch (error) {
+              console.error('❌ Auto-recovery failed:', error);
+              Alert.alert(
+                'Location Tracking Issue',
+                'Unable to start location tracking for your active delivery. Please check your location permissions and restart the app.',
+                [{ text: 'OK' }]
+              );
+            }
+          }
         } else {
           console.log('🔴 Driver going offline - stopping request manager');
           DeliveryRequestManager.stopListening();
@@ -615,6 +633,53 @@ const DriverHome = () => {
                 value={isOnline}
               />
             </View>
+
+            {/* Location Tracking Status */}
+            {isOnline && (
+              <View className="mt-3 pt-3 border-t border-gray-100">
+                <View className="flex-row items-center justify-between">
+                  <View className="flex-row items-center">
+                    <View className={`w-2 h-2 rounded-full mr-2 ${
+                      LocationService.getTrackingStatus().isTracking ? 'bg-green-500' : 'bg-orange-500'
+                    }`} />
+                    <Text className="text-sm text-gray-600">
+                      Location Tracking: {LocationService.getTrackingStatus().isTracking ? 'Active' : 'Waiting for delivery'}
+                    </Text>
+                  </View>
+                  
+                  {/* Manual Recovery Button */}
+                  {driver?.currentRideId && !LocationService.getTrackingStatus().isTracking && (
+                    <TouchableOpacity 
+                      className="bg-orange-500 px-3 py-1 rounded-lg"
+                      onPress={async () => {
+                        console.log('🔧 Manual location tracking restart requested');
+                        try {
+                          await LocationService.startTracking(driver.currentRideId, driver.id);
+                          Alert.alert('Success', 'Location tracking has been restarted');
+                        } catch (error) {
+                          console.error('❌ Manual restart failed:', error);
+                          Alert.alert('Error', 'Failed to restart location tracking. Please check your location permissions.');
+                        }
+                      }}
+                    >
+                      <Text className="text-white text-xs font-medium">Fix Tracking</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+                
+                {LocationService.getTrackingStatus().isTracking && (
+                  <Text className="text-xs text-green-600 mt-1">
+                    📍 Your location is being shared with customers
+                  </Text>
+                )}
+                
+                {driver?.currentRideId && !LocationService.getTrackingStatus().isTracking && (
+                  <Text className="text-xs text-orange-600 mt-1">
+                    ⚠️ Active delivery detected but location tracking is off
+                  </Text>
+                )}
+              </View>
+            )}
           </View>
         )}
         
