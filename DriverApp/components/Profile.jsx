@@ -26,6 +26,7 @@ const Profile = () => {
     const [showEarningsModal, setShowEarningsModal] = useState(false);
     const [editLoading, setEditLoading] = useState(false);
     const [earningsData, setEarningsData] = useState(null);
+    const [earningsLoading, setEarningsLoading] = useState(false);
     
     // Edit form states
     const [editForm, setEditForm] = useState({
@@ -77,48 +78,137 @@ const Profile = () => {
 
     const fetchEarningsData = async () => {
         try {
+            setEarningsLoading(true);
+            setEarningsData(null); // Reset data to show loading
+            
+            // Debug: Investigate database structure first
+            console.log('🔍 Starting earnings investigation for driver:', driverData.id);
+            await DriverService.debugEarningsData(driverData.id);
+            
             // Use the new detailed earnings method
             const detailedEarnings = await DriverService.getDriverEarnings(driverData.id);
             const profileData = await DriverService.getDriverProfile();
             const stats = profileData.stats || {};
             
-            // Create comprehensive earnings breakdown using real and estimated data
+            // Calculate today's earnings
+            const today = new Date();
+            const todayEarnings = Math.round((detailedEarnings.recentEarnings?.filter(e => {
+                if (!e.date) return false;
+                const earningDate = e.date instanceof Date ? e.date : e.date.toDate();
+                return earningDate.toDateString() === today.toDateString();
+            }).reduce((sum, e) => sum + e.amount, 0) || 0) * 100) / 100;
+            
+            // Calculate this week's earnings
+            const weekStart = new Date(today);
+            weekStart.setDate(today.getDate() - today.getDay());
+            weekStart.setHours(0, 0, 0, 0);
+            
+            const thisWeekEarnings = Math.round((detailedEarnings.recentEarnings?.filter(e => {
+                if (!e.date) return false;
+                const earningDate = e.date instanceof Date ? e.date : e.date.toDate();
+                return earningDate >= weekStart;
+            }).reduce((sum, e) => sum + e.amount, 0) || 0) * 100) / 100;
+            
+            // Calculate this month's earnings
+            const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+            const thisMonthEarnings = Math.round((detailedEarnings.recentEarnings?.filter(e => {
+                if (!e.date) return false;
+                const earningDate = e.date instanceof Date ? e.date : e.date.toDate();
+                return earningDate >= monthStart;
+            }).reduce((sum, e) => sum + e.amount, 0) || 0) * 100) / 100;
+            
+            // Calculate last month's earnings
+            const lastMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+            const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
+            const lastMonthEarnings = Math.round((detailedEarnings.recentEarnings?.filter(e => {
+                if (!e.date) return false;
+                const earningDate = e.date instanceof Date ? e.date : e.date.toDate();
+                return earningDate >= lastMonthStart && earningDate <= lastMonthEnd;
+            }).reduce((sum, e) => sum + e.amount, 0) || 0) * 100) / 100;
+            
+            // Create comprehensive earnings breakdown using real data
             const earnings = {
-                totalEarnings: detailedEarnings.totalEarnings || stats.totalEarnings || 0,
-                averagePerTrip: detailedEarnings.averagePerTrip || stats.averageEarningsPerTrip || 0,
-                completedTrips: detailedEarnings.completedTrips || stats.completedTrips || 0,
-                thisMonth: detailedEarnings.monthlyEarnings?.reduce((sum, earning) => sum + earning.amount, 0) || Math.round((stats.totalEarnings || 0) * 0.3),
-                thisWeek: detailedEarnings.weeklyEarnings?.reduce((sum, earning) => sum + earning.amount, 0) || Math.round((stats.totalEarnings || 0) * 0.1),
-                pendingPayouts: Math.round((detailedEarnings.totalEarnings || stats.totalEarnings || 0) * 0.05),
+                totalEarnings: detailedEarnings.totalEarnings || 0,
+                averagePerTrip: detailedEarnings.averagePerTrip || 0,
+                completedTrips: detailedEarnings.completedTrips || 0,
+                thisMonth: thisMonthEarnings,
+                thisWeek: thisWeekEarnings,
+                today: todayEarnings,
+                pendingPayouts: Math.round((detailedEarnings.totalEarnings || 0) * 0.05 * 100) / 100, // 5% pending
                 recentEarnings: detailedEarnings.recentEarnings || [],
                 breakdown: [
                     { 
                         period: 'Today', 
-                        amount: detailedEarnings.recentEarnings?.filter(e => {
-                            const today = new Date();
-                            return e.date.toDateString() === today.toDateString();
-                        }).reduce((sum, e) => sum + e.amount, 0) || Math.round((stats.totalEarnings || 0) * 0.02)
+                        amount: todayEarnings,
+                        icon: '📅'
                     },
                     { 
                         period: 'This Week', 
-                        amount: detailedEarnings.weeklyEarnings?.reduce((sum, earning) => sum + earning.amount, 0) || Math.round((stats.totalEarnings || 0) * 0.1)
+                        amount: thisWeekEarnings,
+                        icon: '📊'
                     },
                     { 
                         period: 'This Month', 
-                        amount: detailedEarnings.monthlyEarnings?.reduce((sum, earning) => sum + earning.amount, 0) || Math.round((stats.totalEarnings || 0) * 0.3)
+                        amount: thisMonthEarnings,
+                        icon: '📈'
                     },
                     { 
                         period: 'Last Month', 
-                        amount: Math.round((detailedEarnings.totalEarnings || stats.totalEarnings || 0) * 0.25)
+                        amount: lastMonthEarnings,
+                        icon: '📋'
                     },
-                ]
+                ],
+                // Additional analytics
+                analytics: {
+                    bestDay: detailedEarnings.recentEarnings?.reduce((best, current) => {
+                        const currentDate = current.date instanceof Date ? current.date : current.date?.toDate();
+                        if (!currentDate) return best;
+                        
+                        const dayKey = currentDate.toDateString();
+                        const dayEarnings = detailedEarnings.recentEarnings
+                            .filter(e => {
+                                const eDate = e.date instanceof Date ? e.date : e.date?.toDate();
+                                return eDate && eDate.toDateString() === dayKey;
+                            })
+                            .reduce((sum, e) => sum + e.amount, 0);
+                        
+                        const roundedDayEarnings = Math.round(dayEarnings * 100) / 100;
+                        return roundedDayEarnings > (best.amount || 0) ? { date: dayKey, amount: roundedDayEarnings } : best;
+                    }, { date: 'N/A', amount: 0 }),
+                    totalTripsThisWeek: detailedEarnings.recentEarnings?.filter(e => {
+                        if (!e.date) return false;
+                        const earningDate = e.date instanceof Date ? e.date : e.date.toDate();
+                        return earningDate >= weekStart;
+                    }).length || 0,
+                    averagePerDay: thisWeekEarnings > 0 ? Math.round((thisWeekEarnings / 7) * 100) / 100 : 0
+                }
             };
             
             setEarningsData(earnings);
         } catch (error) {
             console.error('Error fetching earnings:', error);
-            Alert.alert('Error', 'Failed to load earnings data');
+            Alert.alert('Error', 'Failed to load earnings data. Please check your connection and try again.');
+            // Set empty earnings data to show error state
+            setEarningsData({
+                totalEarnings: 0,
+                averagePerTrip: 0,
+                completedTrips: 0,
+                thisMonth: 0,
+                thisWeek: 0,
+                today: 0,
+                pendingPayouts: 0,
+                recentEarnings: [],
+                breakdown: [],
+                analytics: { bestDay: { date: 'N/A', amount: 0 }, totalTripsThisWeek: 0, averagePerDay: 0 }
+            });
+        } finally {
+            setEarningsLoading(false);
         }
+    };
+
+    const refreshEarningsData = async () => {
+        if (!driverData?.id) return;
+        await fetchEarningsData();
     };
 
     const handleImagePicker = async () => {
@@ -469,11 +559,23 @@ const Profile = () => {
                     <TouchableOpacity 
                         className="flex-1 bg-green-600 py-3 rounded-lg ml-2"
                         onPress={() => {
-                            fetchEarningsData();
                             setShowEarningsModal(true);
+                            if (!earningsData) {
+                                fetchEarningsData();
+                            }
                         }}
+                        disabled={earningsLoading}
                     >
-                        <Text className="text-white text-center font-semibold">View Earnings</Text>
+                        <View className="flex-row items-center justify-center">
+                            {earningsLoading ? (
+                                <ActivityIndicator size={16} color="white" />
+                            ) : (
+                                <Ionicons name="cash-outline" size={16} color="white" />
+                            )}
+                            <Text className="text-white text-center font-semibold ml-2">
+                                {earningsLoading ? 'Loading...' : 'View Earnings'}
+                            </Text>
+                        </View>
                     </TouchableOpacity>
                 </View>
 
@@ -721,7 +823,17 @@ const Profile = () => {
                             <Text className="text-blue-600 text-lg">Close</Text>
                         </TouchableOpacity>
                         <Text className="text-lg font-bold">Earnings</Text>
-                        <View className="w-12" />
+                        <TouchableOpacity 
+                            onPress={refreshEarningsData}
+                            disabled={earningsLoading}
+                            className="flex-row items-center"
+                        >
+                            {earningsLoading ? (
+                                <ActivityIndicator size={16} color="#2563eb" />
+                            ) : (
+                                <Ionicons name="refresh" size={20} color="#2563eb" />
+                            )}
+                        </TouchableOpacity>
                     </View>
 
                     <ScrollView className="flex-1 p-4">
@@ -730,29 +842,70 @@ const Profile = () => {
                                 {/* Total Earnings Card */}
                                 <View className="bg-blue-600 rounded-xl p-6 mb-6">
                                     <Text className="text-white text-lg font-semibold">Total Earnings</Text>
-                                    <Text className="text-white text-3xl font-bold">${earningsData.totalEarnings}</Text>
+                                    <Text className="text-white text-3xl font-bold">LKR {earningsData.totalEarnings}</Text>
                                     <Text className="text-blue-200">From {earningsData.completedTrips} completed deliveries</Text>
                                 </View>
 
-                                {/* Quick Stats */}
-                                <View className="flex-row justify-between mb-6">
+                                {/* Quick Stats Row 1 */}
+                                <View className="flex-row justify-between mb-4">
                                     <View className="bg-green-50 rounded-lg p-4 flex-1 mr-2">
-                                        <Text className="text-green-600 font-semibold">This Month</Text>
-                                        <Text className="text-green-800 text-xl font-bold">${earningsData.thisMonth}</Text>
+                                        <Text className="text-green-600 font-semibold">Today</Text>
+                                        <Text className="text-green-800 text-xl font-bold">LKR {earningsData.today}</Text>
                                     </View>
-                                    <View className="bg-orange-50 rounded-lg p-4 flex-1 ml-2">
-                                        <Text className="text-orange-600 font-semibold">Average/Trip</Text>
-                                        <Text className="text-orange-800 text-xl font-bold">${earningsData.averagePerTrip}</Text>
+                                    <View className="bg-blue-50 rounded-lg p-4 flex-1 ml-2">
+                                        <Text className="text-blue-600 font-semibold">This Week</Text>
+                                        <Text className="text-blue-800 text-xl font-bold">LKR {earningsData.thisWeek}</Text>
                                     </View>
                                 </View>
 
+                                {/* Quick Stats Row 2 */}
+                                <View className="flex-row justify-between mb-6">
+                                    <View className="bg-purple-50 rounded-lg p-4 flex-1 mr-2">
+                                        <Text className="text-purple-600 font-semibold">This Month</Text>
+                                        <Text className="text-purple-800 text-xl font-bold">LKR {earningsData.thisMonth}</Text>
+                                    </View>
+                                    <View className="bg-orange-50 rounded-lg p-4 flex-1 ml-2">
+                                        <Text className="text-orange-600 font-semibold">Average/Trip</Text>
+                                        <Text className="text-orange-800 text-xl font-bold">LKR {earningsData.averagePerTrip}</Text>
+                                    </View>
+                                </View>
+
+                                {/* Analytics Section */}
+                                {earningsData.analytics && (
+                                    <View className="bg-gray-50 rounded-xl p-4 mb-6">
+                                        <Text className="text-lg font-semibold mb-3">📊 Weekly Analytics</Text>
+                                        <View className="space-y-2">
+                                            <View className="flex-row justify-between items-center">
+                                                <Text className="text-gray-700">Trips This Week</Text>
+                                                <Text className="font-semibold text-blue-600">{earningsData.analytics.totalTripsThisWeek}</Text>
+                                            </View>
+                                            <View className="flex-row justify-between items-center">
+                                                <Text className="text-gray-700">Daily Average</Text>
+                                                <Text className="font-semibold text-green-600">LKR {earningsData.analytics.averagePerDay}</Text>
+                                            </View>
+                                            <View className="flex-row justify-between items-center">
+                                                <Text className="text-gray-700">Best Day</Text>
+                                                <Text className="font-semibold text-purple-600">
+                                                    LKR {earningsData.analytics.bestDay.amount} 
+                                                    {earningsData.analytics.bestDay.date !== 'N/A' && 
+                                                        ` (${new Date(earningsData.analytics.bestDay.date).toLocaleDateString('en-US', { weekday: 'short' })})`
+                                                    }
+                                                </Text>
+                                            </View>
+                                        </View>
+                                    </View>
+                                )}
+
                                 {/* Earnings Breakdown */}
                                 <View className="bg-gray-50 rounded-xl p-4 mb-6">
-                                    <Text className="text-lg font-semibold mb-3">Earnings Breakdown</Text>
+                                    <Text className="text-lg font-semibold mb-3">💰 Earnings Breakdown</Text>
                                     {earningsData.breakdown.map((item, index) => (
-                                        <View key={index} className="flex-row justify-between items-center py-2">
-                                            <Text className="text-gray-700">{item.period}</Text>
-                                            <Text className="font-semibold">${item.amount}</Text>
+                                        <View key={index} className="flex-row justify-between items-center py-3 border-b border-gray-200 last:border-b-0">
+                                            <View className="flex-row items-center">
+                                                <Text className="text-lg mr-2">{item.icon}</Text>
+                                                <Text className="text-gray-700 font-medium">{item.period}</Text>
+                                            </View>
+                                            <Text className="font-bold text-lg">LKR {item.amount}</Text>
                                         </View>
                                     ))}
                                 </View>
@@ -760,26 +913,38 @@ const Profile = () => {
                                 {/* Pending Payouts */}
                                 <View className="bg-yellow-50 rounded-xl p-4 mb-6">
                                     <View className="flex-row items-center justify-between">
-                                        <View>
-                                            <Text className="text-yellow-800 font-semibold">Pending Payouts</Text>
-                                            <Text className="text-yellow-600">Will be processed soon</Text>
+                                        <View className="flex-1">
+                                            <View className="flex-row items-center mb-1">
+                                                <Text className="text-lg mr-2">⏳</Text>
+                                                <Text className="text-yellow-800 font-semibold">Pending Payouts</Text>
+                                            </View>
+                                            <Text className="text-yellow-600">Will be processed within 3-5 business days</Text>
                                         </View>
-                                        <Text className="text-yellow-800 text-xl font-bold">${earningsData.pendingPayouts}</Text>
+                                        <Text className="text-yellow-800 text-xl font-bold">LKR {earningsData.pendingPayouts}</Text>
                                     </View>
                                 </View>
 
                                 {/* Payment Info */}
-                                <View className="bg-gray-50 rounded-xl p-4">
-                                    <Text className="text-lg font-semibold mb-2">Payment Information</Text>
-                                    <Text className="text-gray-700 mb-1">• Payments are processed weekly</Text>
-                                    <Text className="text-gray-700 mb-1">• Direct deposit to your bank account</Text>
-                                    <Text className="text-gray-700">• Contact support for payment issues</Text>
+                                <View className="bg-gray-50 rounded-xl p-4 mb-6">
+                                    <View className="flex-row items-center mb-2">
+                                        <Text className="text-lg mr-2">💳</Text>
+                                        <Text className="text-lg font-semibold">Payment Information</Text>
+                                    </View>
+                                    <View className="space-y-1">
+                                        <Text className="text-gray-700">• Payments are processed weekly on Fridays</Text>
+                                        <Text className="text-gray-700">• Direct deposit to your registered bank account</Text>
+                                        <Text className="text-gray-700">• Minimum payout threshold: LKR 1,000</Text>
+                                        <Text className="text-gray-700">• Contact support for payment issues</Text>
+                                    </View>
                                 </View>
 
                                 {/* Recent Earnings Transactions */}
                                 {earningsData.recentEarnings && earningsData.recentEarnings.length > 0 && (
-                                    <View className="bg-white rounded-xl p-4 mt-6 border border-gray-200">
-                                        <Text className="text-lg font-semibold mb-3">Recent Earnings</Text>
+                                    <View className="bg-white rounded-xl p-4 border border-gray-200">
+                                        <View className="flex-row items-center mb-3">
+                                            <Text className="text-lg mr-2">📋</Text>
+                                            <Text className="text-lg font-semibold">Recent Earnings</Text>
+                                        </View>
                                         {earningsData.recentEarnings.slice(0, 5).map((earning, index) => (
                                             <View key={earning.tripId || index} className="flex-row justify-between items-center py-3 border-b border-gray-100 last:border-b-0">
                                                 <View className="flex-1">
@@ -787,27 +952,54 @@ const Profile = () => {
                                                         Delivery to {earning.customerName}
                                                     </Text>
                                                     <Text className="text-gray-500 text-sm">
-                                                        {earning.pickupLocation}
+                                                        📍 {earning.pickupLocation}
                                                     </Text>
                                                     <Text className="text-gray-400 text-xs">
-                                                        {earning.date ? DriverService.getTimeAgo(earning.date) : 'Recently'}
+                                                        🕒 {earning.date ? DriverService.getTimeAgo(earning.date) : 'Recently'}
                                                     </Text>
                                                 </View>
                                                 <View className="items-end">
                                                     <Text className="font-bold text-green-600 text-lg">
-                                                        +${earning.amount}
+                                                        +LKR {earning.amount}
                                                     </Text>
+                                                    <Text className="text-gray-400 text-xs">Trip #{earning.tripId?.slice(-6)}</Text>
                                                 </View>
                                             </View>
                                         ))}
                                         
                                         {earningsData.recentEarnings.length > 5 && (
-                                            <TouchableOpacity className="mt-3 py-2">
+                                            <TouchableOpacity className="mt-3 py-2 bg-blue-50 rounded-lg">
                                                 <Text className="text-blue-600 text-center font-semibold">
-                                                    View All Transactions
+                                                    View All {earningsData.recentEarnings.length} Transactions
                                                 </Text>
                                             </TouchableOpacity>
                                         )}
+                                    </View>
+                                )}
+
+                                {/* No Earnings Message */}
+                                {earningsData.totalEarnings === 0 && (
+                                    <View className="bg-blue-50 rounded-xl p-6 items-center">
+                                        <Text className="text-4xl mb-2">🚀</Text>
+                                        <Text className="text-blue-800 font-semibold text-lg mb-1">Start Earning Today!</Text>
+                                        <Text className="text-blue-600 text-center mb-4">
+                                            Complete your first delivery to start building your earnings history.
+                                        </Text>
+                                        
+                                        {/* Debug Button */}
+                                        <TouchableOpacity 
+                                            className="bg-gray-200 px-4 py-2 rounded-lg mt-2"
+                                            onPress={async () => {
+                                                console.log('🔍 Manual debug investigation triggered');
+                                                const debugResult = await DriverService.debugEarningsData(driverData.id);
+                                                Alert.alert(
+                                                    'Debug Results', 
+                                                    `Found ${debugResult?.totalDocuments || 0} documents. Check console for details.`
+                                                );
+                                            }}
+                                        >
+                                            <Text className="text-gray-700 text-sm">🔍 Debug Database</Text>
+                                        </TouchableOpacity>
                                     </View>
                                 )}
                             </>

@@ -340,76 +340,273 @@ class DriverService {
   }
 
   /**
-   * Get detailed earnings data for the driver
+   * Get detailed earnings data for the driver - Enhanced version
    */
   static async getDriverEarnings(driverId) {
     try {
       console.log('💰 Fetching detailed earnings for:', driverId);
       
       const rideRequestsRef = collection(db, 'rideRequests');
-      const q = query(
+      
+      // First, try to get ALL rides for this driver (not just completed)
+      const allRidesQuery = query(
         rideRequestsRef, 
         where('driverId', '==', driverId),
-        where('status', '==', 'completed'),
-        limit(100)
+        limit(300) // Increased limit to get more data
       );
       
-      const querySnapshot = await getDocs(q);
+      const allRidesSnapshot = await getDocs(allRidesQuery);
+      console.log(`📊 Found ${allRidesSnapshot.docs.length} total rides for driver`);
+      
       const earnings = {
         totalEarnings: 0,
         completedTrips: 0,
         weeklyEarnings: [],
         monthlyEarnings: [],
         averagePerTrip: 0,
-        recentEarnings: []
+        recentEarnings: [],
+        dailyBreakdown: new Map(),
+        weeklyBreakdown: new Map(),
+        monthlyBreakdown: new Map()
       };
       
       const now = new Date();
       const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
       const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      const threeMonthsAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
       
-      querySnapshot.forEach(doc => {
+      // Process all rides and look for earnings in multiple ways
+      allRidesSnapshot.forEach(doc => {
         const data = doc.data();
-        const fare = data.fare || data.price || 0;
-        const completedAt = data.completedAt?.toDate() || data.createdAt?.toDate();
+        
+        // Log each document for debugging
+        console.log(`🔍 Processing ride ${doc.id}:`, {
+          status: data.status,
+          deliveryStatus: data.deliveryStatus,
+          fare: data.fare,
+          price: data.price,
+          ridePrice: data.rideDetails?.price,
+          totalPrice: data.totalPrice,
+          driverEarnings: data.driverEarnings,
+          hasRideDetails: !!data.rideDetails
+        });
+        
+        // Check multiple status conditions for completed rides
+        const isCompleted = data.status === 'completed' || 
+                           data.deliveryStatus === 'completed' ||
+                           data.status === 'delivered' ||
+                           data.deliveryStatus === 'delivered';
+        
+        if (!isCompleted) {
+          console.log(`⏭️ Skipping ride ${doc.id} - not completed (status: ${data.status}, deliveryStatus: ${data.deliveryStatus})`);
+          return;
+        }
+        
+        // Try to extract fare/earnings from multiple possible fields
+        let fare = 0;
+        
+        // Priority order for fare extraction
+        if (data.driverEarnings && data.driverEarnings > 0) {
+          fare = Math.round(parseFloat(data.driverEarnings) * 100) / 100;
+          console.log(`💰 Using driverEarnings: LKR ${fare}`);
+        } else if (data.fare && data.fare > 0) {
+          fare = Math.round(parseFloat(data.fare) * 100) / 100;
+          console.log(`💰 Using fare: LKR ${fare}`);
+        } else if (data.price && data.price > 0) {
+          fare = Math.round(parseFloat(data.price) * 100) / 100;
+          console.log(`💰 Using price: LKR ${fare}`);
+        } else if (data.rideDetails?.price && data.rideDetails.price > 0) {
+          // Driver typically gets 80% of ride price
+          const ridePrice = parseFloat(data.rideDetails.price);
+          fare = Math.round((ridePrice * 0.8) * 100) / 100;
+          console.log(`💰 Calculated from rideDetails.price: LKR ${ridePrice} * 0.8 = LKR ${fare}`);
+        } else if (data.totalPrice && data.totalPrice > 0) {
+          // Driver typically gets 80% of total price
+          const totalPrice = parseFloat(data.totalPrice);
+          fare = Math.round((totalPrice * 0.8) * 100) / 100;
+          console.log(`💰 Calculated from totalPrice: LKR ${totalPrice} * 0.8 = LKR ${fare}`);
+        } else {
+          console.log(`⚠️ No fare found for ride ${doc.id}`);
+          return; // Skip if no fare found
+        }
+        
+        // Handle different date formats
+        let completedAt = null;
+        if (data.completedAt) {
+          completedAt = data.completedAt.toDate ? data.completedAt.toDate() : new Date(data.completedAt);
+        } else if (data.deliveredAt) {
+          completedAt = data.deliveredAt.toDate ? data.deliveredAt.toDate() : new Date(data.deliveredAt);
+        } else if (data.updatedAt) {
+          completedAt = data.updatedAt.toDate ? data.updatedAt.toDate() : new Date(data.updatedAt);
+        } else if (data.createdAt) {
+          completedAt = data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt);
+        } else {
+          completedAt = new Date(); // Fallback to current date
+        }
+        
+        console.log(`✅ Adding earnings: LKR ${fare} for ride ${doc.id} completed at ${completedAt}`);
         
         earnings.totalEarnings += fare;
         earnings.completedTrips++;
         
-        if (completedAt && completedAt >= weekAgo) {
+        // Daily breakdown
+        const dayKey = completedAt.toDateString();
+        earnings.dailyBreakdown.set(dayKey, (earnings.dailyBreakdown.get(dayKey) || 0) + fare);
+        
+        // Weekly breakdown
+        const weekStart = new Date(completedAt);
+        weekStart.setDate(completedAt.getDate() - completedAt.getDay());
+        const weekKey = weekStart.toDateString();
+        earnings.weeklyBreakdown.set(weekKey, (earnings.weeklyBreakdown.get(weekKey) || 0) + fare);
+        
+        // Monthly breakdown
+        const monthKey = `${completedAt.getFullYear()}-${completedAt.getMonth()}`;
+        earnings.monthlyBreakdown.set(monthKey, (earnings.monthlyBreakdown.get(monthKey) || 0) + fare);
+        
+        // Weekly earnings (last 7 days)
+        if (completedAt >= weekAgo) {
           earnings.weeklyEarnings.push({
             amount: fare,
             date: completedAt,
-            tripId: doc.id
+            tripId: doc.id,
+            customerName: data.customerName || data.packageDetails?.senderName || 'Customer',
+            pickupLocation: data.packageDetails?.pickupLocation || data.pickupLocation || 'Unknown'
           });
         }
         
-        if (completedAt && completedAt >= monthAgo) {
+        // Monthly earnings (last 30 days)
+        if (completedAt >= monthAgo) {
           earnings.monthlyEarnings.push({
             amount: fare,
             date: completedAt,
-            tripId: doc.id
+            tripId: doc.id,
+            customerName: data.customerName || data.packageDetails?.senderName || 'Customer',
+            pickupLocation: data.packageDetails?.pickupLocation || data.pickupLocation || 'Unknown'
           });
         }
         
-        earnings.recentEarnings.push({
-          amount: fare,
-          date: completedAt || new Date(),
-          tripId: doc.id,
-          customerName: data.customerName || 'Customer',
-          pickupLocation: data.packageDetails?.pickupLocation || 'Unknown'
-        });
+        // Recent earnings (last 3 months for better analytics)
+        if (completedAt >= threeMonthsAgo) {
+          earnings.recentEarnings.push({
+            amount: fare,
+            date: completedAt,
+            tripId: doc.id,
+            customerName: data.customerName || data.packageDetails?.senderName || 'Customer',
+            pickupLocation: data.packageDetails?.pickupLocation || data.pickupLocation || 'Unknown',
+            deliveryLocation: data.packageDetails?.deliveryLocation || data.packageDetails?.dropoffLocation || data.deliveryLocation || 'Unknown',
+            distance: data.distance || 0,
+            duration: data.duration || 0
+          });
+        }
       });
       
+      // If no earnings found, try alternative approach - check for any rides with pricing data
+      if (earnings.totalEarnings === 0 && allRidesSnapshot.docs.length > 0) {
+        console.log('🔄 No earnings found with completed status, checking all rides for pricing data...');
+        
+        allRidesSnapshot.forEach(doc => {
+          const data = doc.data();
+          
+          // Look for any ride with pricing information, regardless of status
+          let estimatedFare = 0;
+          
+          if (data.rideDetails?.price && data.rideDetails.price > 0) {
+            estimatedFare = Math.round(parseFloat(data.rideDetails.price) * 0.8 * 100) / 100; // Driver gets 80%
+          } else if (data.totalPrice && data.totalPrice > 0) {
+            estimatedFare = Math.round(parseFloat(data.totalPrice) * 0.8 * 100) / 100;
+          } else if (data.price && data.price > 0) {
+            estimatedFare = Math.round(parseFloat(data.price) * 100) / 100;
+          }
+          
+          if (estimatedFare > 0) {
+            console.log(`📊 Found pricing data in ride ${doc.id}: LKR ${estimatedFare}`);
+            
+            const completedAt = data.createdAt?.toDate() || new Date();
+            
+            earnings.totalEarnings += estimatedFare;
+            earnings.completedTrips++;
+            
+            earnings.recentEarnings.push({
+              amount: estimatedFare,
+              date: completedAt,
+              tripId: doc.id,
+              customerName: data.customerName || data.packageDetails?.senderName || 'Customer',
+              pickupLocation: data.packageDetails?.pickupLocation || data.pickupLocation || 'Unknown',
+              deliveryLocation: data.packageDetails?.deliveryLocation || data.packageDetails?.dropoffLocation || 'Unknown',
+              distance: data.distance || 0,
+              duration: data.duration || 0
+            });
+          }
+        });
+      }
+      
+      // Calculate averages and analytics
       earnings.averagePerTrip = earnings.completedTrips > 0 
-        ? Math.round(earnings.totalEarnings / earnings.completedTrips) 
+        ? Math.round((earnings.totalEarnings / earnings.completedTrips) * 100) / 100 
         : 0;
       
       // Sort recent earnings by date (most recent first)
       earnings.recentEarnings.sort((a, b) => b.date - a.date);
-      earnings.recentEarnings = earnings.recentEarnings.slice(0, 10);
       
-      console.log(`✅ Total earnings: $${earnings.totalEarnings} from ${earnings.completedTrips} trips`);
+      // Calculate additional analytics
+      const analytics = {
+        bestDay: { date: 'N/A', amount: 0 },
+        worstDay: { date: 'N/A', amount: Infinity },
+        averagePerDay: 0,
+        totalDaysWorked: earnings.dailyBreakdown.size,
+        bestWeek: { date: 'N/A', amount: 0 },
+        bestMonth: { date: 'N/A', amount: 0 }
+      };
+      
+      // Find best and worst days
+      for (const [date, amount] of earnings.dailyBreakdown) {
+        const roundedAmount = Math.round(amount * 100) / 100;
+        if (roundedAmount > analytics.bestDay.amount) {
+          analytics.bestDay = { date, amount: roundedAmount };
+        }
+        if (roundedAmount < analytics.worstDay.amount && roundedAmount > 0) {
+          analytics.worstDay = { date, amount: roundedAmount };
+        }
+      }
+      
+      // Calculate average per day worked
+      if (analytics.totalDaysWorked > 0) {
+        analytics.averagePerDay = Math.round((earnings.totalEarnings / analytics.totalDaysWorked) * 100) / 100;
+      }
+      
+      // Find best week
+      for (const [date, amount] of earnings.weeklyBreakdown) {
+        const roundedAmount = Math.round(amount * 100) / 100;
+        if (roundedAmount > analytics.bestWeek.amount) {
+          analytics.bestWeek = { date, amount: roundedAmount };
+        }
+      }
+      
+      // Find best month
+      for (const [date, amount] of earnings.monthlyBreakdown) {
+        const roundedAmount = Math.round(amount * 100) / 100;
+        if (roundedAmount > analytics.bestMonth.amount) {
+          analytics.bestMonth = { date, amount: roundedAmount };
+        }
+      }
+      
+      // Reset worst day if no valid data
+      if (analytics.worstDay.amount === Infinity) {
+        analytics.worstDay = { date: 'N/A', amount: 0 };
+      }
+      
+      // Add analytics to earnings object
+      earnings.analytics = analytics;
+      
+      // Round total earnings for display
+      earnings.totalEarnings = Math.round(earnings.totalEarnings * 100) / 100;
+      
+      console.log(`✅ FINAL EARNINGS SUMMARY:`);
+      console.log(`   Total Earnings: LKR ${earnings.totalEarnings}`);
+      console.log(`   Completed Trips: ${earnings.completedTrips}`);
+      console.log(`   Average per Trip: LKR ${earnings.averagePerTrip}`);
+      console.log(`   Recent Earnings Count: ${earnings.recentEarnings.length}`);
+      console.log(`   Analytics - Best Day: LKR ${analytics.bestDay.amount}, Average per Day: LKR ${analytics.averagePerDay}`);
       
       return earnings;
     } catch (error) {
@@ -420,7 +617,15 @@ class DriverService {
         weeklyEarnings: [],
         monthlyEarnings: [],
         averagePerTrip: 0,
-        recentEarnings: []
+        recentEarnings: [],
+        analytics: {
+          bestDay: { date: 'N/A', amount: 0 },
+          worstDay: { date: 'N/A', amount: 0 },
+          averagePerDay: 0,
+          totalDaysWorked: 0,
+          bestWeek: { date: 'N/A', amount: 0 },
+          bestMonth: { date: 'N/A', amount: 0 }
+        }
       };
     }
   }
@@ -451,6 +656,75 @@ class DriverService {
     } catch (error) {
       console.error('Error updating driver profile with image:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Debug function to investigate database structure for earnings
+   */
+  static async debugEarningsData(driverId) {
+    try {
+      console.log('🔍 DEBUG: Investigating earnings data for driver:', driverId);
+      
+      const rideRequestsRef = collection(db, 'rideRequests');
+      const q = query(rideRequestsRef, where('driverId', '==', driverId), limit(50));
+      const snapshot = await getDocs(q);
+      
+      console.log(`🔍 DEBUG: Found ${snapshot.docs.length} total documents for driver`);
+      
+      const statusCounts = {};
+      const fieldAnalysis = {
+        fare: 0,
+        price: 0,
+        rideDetailsPrice: 0,
+        totalPrice: 0,
+        driverEarnings: 0
+      };
+      
+      snapshot.docs.forEach((doc, index) => {
+        const data = doc.data();
+        
+        // Count statuses
+        const status = data.status || 'unknown';
+        const deliveryStatus = data.deliveryStatus || 'unknown';
+        statusCounts[status] = (statusCounts[status] || 0) + 1;
+        statusCounts[`delivery_${deliveryStatus}`] = (statusCounts[`delivery_${deliveryStatus}`] || 0) + 1;
+        
+        // Count field presence
+        if (data.fare) fieldAnalysis.fare++;
+        if (data.price) fieldAnalysis.price++;
+        if (data.rideDetails?.price) fieldAnalysis.rideDetailsPrice++;
+        if (data.totalPrice) fieldAnalysis.totalPrice++;
+        if (data.driverEarnings) fieldAnalysis.driverEarnings++;
+        
+        // Log first few documents in detail
+        if (index < 3) {
+          console.log(`🔍 DEBUG: Document ${index + 1} (${doc.id}):`, {
+            status: data.status,
+            deliveryStatus: data.deliveryStatus,
+            fare: data.fare,
+            price: data.price,
+            rideDetailsPrice: data.rideDetails?.price,
+            totalPrice: data.totalPrice,
+            driverEarnings: data.driverEarnings,
+            createdAt: data.createdAt?.toDate?.() || data.createdAt,
+            completedAt: data.completedAt?.toDate?.() || data.completedAt,
+            allFields: Object.keys(data)
+          });
+        }
+      });
+      
+      console.log('🔍 DEBUG: Status distribution:', statusCounts);
+      console.log('🔍 DEBUG: Field analysis:', fieldAnalysis);
+      
+      return {
+        totalDocuments: snapshot.docs.length,
+        statusCounts,
+        fieldAnalysis
+      };
+    } catch (error) {
+      console.error('🔍 DEBUG: Error investigating earnings data:', error);
+      return null;
     }
   }
 }

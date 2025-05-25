@@ -5,11 +5,18 @@
  * @returns {string} Formatted currency string
  */
 export const formatCurrency = (amount, currency = 'LKR') => {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency,
-    minimumFractionDigits: 2
-  }).format(amount);
+  if (!amount || isNaN(amount)) return 'LKR 0';
+  
+  // Round to 2 decimal places first
+  const roundedAmount = Math.round(amount * 100) / 100;
+  
+  // Format number with commas for thousands
+  const formattedAmount = new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2
+  }).format(roundedAmount);
+  
+  return `LKR ${formattedAmount}`;
 };
 
 /**
