@@ -719,32 +719,6 @@ const DriverHome = () => {
           </View>
         )}
 
-        {/* Action Buttons */}
-        <View className="flex-row justify-around mt-6">
-          <TouchableOpacity className="items-center" onPress={() => navigation.navigate("MyOrder")}>
-            <View
-              className="p-4"
-              style={{
-                backgroundColor: "#1e40af",
-                borderRadius: wp("50%"),
-                width: wp("16%"),
-                height: wp("16%"),
-                justifyContent: "center",
-                alignItems: "center",
-              }}
-            >
-              <Image
-                source={require("../assets/icon/orders.png")}
-                style={{ width: 30, height: 30, tintColor: "white" }}
-                resizeMode="contain"
-              />
-            </View>
-            <Text className="mt-2 text-base font-medium" style={{ fontSize: wp("4%") }}>
-              My Orders
-            </Text>
-          </TouchableOpacity>
-        </View>
-
         {/* Only show if driver is approved */}
         {driver && driver.status === 'approved' && (
           <>

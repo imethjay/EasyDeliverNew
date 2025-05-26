@@ -26,6 +26,8 @@ import TrackingDetails from './components/OrderPreview';
 import LiveTrack from './components/LiveTrack';
 import RescheduleDelivery from './components/RescheduleDelivery';
 import PaymentUpdates from './components/PaymentUpdates'; 
+import PaymentMethodSelection from './components/PaymentMethodSelection';
+import AddPaymentMethod from './components/AddPaymentMethod';
 import SearchingDrivers from './components/SearchingDrivers';
 import RiderConfirmed from './components/RiderConfirmed';
 import DeliveryComplete from './components/DeliveryComplete';
@@ -100,6 +102,8 @@ function MainNavigator() {
       <Stack.Screen name="LiveTrack" component={LiveTrack} />
       <Stack.Screen name="RescheduleDelivery" component={RescheduleDelivery} />
       <Stack.Screen name="PaymentUpdates" component={PaymentUpdates} />
+      <Stack.Screen name="PaymentMethodSelection" component={PaymentMethodSelection} />
+      <Stack.Screen name="AddPaymentMethod" component={AddPaymentMethod} />
       <Stack.Screen name="SearchingDrivers" component={SearchingDrivers} />
       <Stack.Screen name="RiderConfirmed" component={RiderConfirmed} />
       <Stack.Screen name="DeliveryComplete" component={DeliveryComplete} />

@@ -8,7 +8,7 @@ import { db, auth } from '../firebase/init';
 const SearchingDrivers = () => {
   const navigation = useNavigation();
   const route = useRoute();
-  const { packageDetails, courierDetails, selectedCourier, rideDetails, distance, duration } = route.params || {};
+  const { packageDetails, courierDetails, selectedCourier, rideDetails, paymentMethod, distance, duration } = route.params || {};
   
   const [searchTime, setSearchTime] = useState(0);
   const [searchStatus, setSearchStatus] = useState('Searching for nearby drivers...');
@@ -46,6 +46,7 @@ const SearchingDrivers = () => {
           vehicleType: rideDetails?.vehicleType,
           packageDetails: !!packageDetails,
           courierDetails: !!courierDetails,
+          paymentMethod: paymentMethod,
           isScheduled: packageDetails?.deliveryOption === "Schedule for later"
         });
 
@@ -60,6 +61,7 @@ const SearchingDrivers = () => {
           courierDetails,
           selectedCourier,
           rideDetails,
+          paymentMethod: paymentMethod || { type: 'cash', name: 'Cash' }, // Default to cash if not provided
           distance,
           duration,
           customerId: auth.currentUser?.uid,
@@ -86,6 +88,7 @@ const SearchingDrivers = () => {
         console.log('🚀 CREATING RIDE REQUEST with exact data:', {
           selectedCourier: requestData.selectedCourier,
           vehicleType: requestData.rideDetails?.vehicleType,
+          paymentMethod: requestData.paymentMethod,
           status: requestData.status,
           isScheduled: requestData.isScheduled,
           scheduledDateTime: requestData.scheduledDateTime,
@@ -127,7 +130,7 @@ const SearchingDrivers = () => {
     if (packageDetails && courierDetails && selectedCourier && rideDetails) {
       createRideRequest();
     }
-  }, [packageDetails, courierDetails, selectedCourier, rideDetails]);
+  }, [packageDetails, courierDetails, selectedCourier, rideDetails, paymentMethod]);
 
   // Update search timer
   useEffect(() => {

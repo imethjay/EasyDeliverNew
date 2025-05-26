@@ -19,6 +19,7 @@ import { doc, getDoc, collection, query, where, getDocs } from "firebase/firesto
 import { db } from "../firebase/init";
 import { formatCurrency } from "../utils/helpers";
 import PricingService from "../utils/PricingService";
+import { getPaymentMethodDisplayInfo, formatPaymentMethodForStorage } from "../utils/PaymentMethodUtils";
 
 // Function to get geocoding from address
 const getGeocodingFromAddress = async (address) => {
@@ -43,6 +44,7 @@ const getGeocodingFromAddress = async (address) => {
 
 const FindRide = () => {
     const [selectedRide, setSelectedRide] = useState(null);
+    const [selectedPaymentMethod, setSelectedPaymentMethod] = useState({ type: 'cash', name: 'Cash' });
     const [pickup, setPickup] = useState(null);
     const [dropoff, setDropoff] = useState(null);
     const [distance, setDistance] = useState(null);
@@ -198,21 +200,29 @@ const FindRide = () => {
     }, [distance, pricingData, vehicleAvailability]);
 
     const getVehicleIcon = (vehicleType) => {
-        const iconMap = {
-            'Bike': require("../assets/icon/bike.png"),
-            'Car': require("../assets/icon/ez_large.png"),
-            'Truck': require("../assets/icon/ez_xl.png"),
-            'Tuk': require("../assets/icon/tuk.png"),
-            'Mini-Lorry': require("../assets/icon/mini-truck.png"),
-            'Carrier': require("../assets/icon/carrier.png")
-        };
-        return iconMap[vehicleType] || require("../assets/icon/bike.png");
+        switch (vehicleType) {
+            case "Bike":
+                return require("../assets/icon/bike.png");
+            case "Car":
+                return require("../assets/icon/ez_large.png");
+            case "Truck":
+                return require("../assets/icon/truck.png");
+            case "Tuk":
+                return require("../assets/icon/tuk.png");
+            case "Mini-Lorry":
+                return require("../assets/icon/mini-truck.png");
+            case "Carrier":
+                return require("../assets/icon/carrier.png");
+            default:
+                return require("../assets/icon/bike.png");
+        }
     };
 
     const getRandomLocation = (latitude, longitude, range = 0.05) => {
-        const randomLat = latitude + (Math.random() - 0.5) * range;
-        const randomLng = longitude + (Math.random() - 0.5) * range;
-        return { latitude: randomLat, longitude: randomLng };
+        return {
+            latitude: latitude + (Math.random() - 0.5) * range,
+            longitude: longitude + (Math.random() - 0.5) * range,
+        };
     };
 
     const handleBackPress = () => {
@@ -221,6 +231,14 @@ const FindRide = () => {
 
     const handleSelectRide = (id) => {
         setSelectedRide(id);
+    };
+
+    const handlePaymentMethodSelection = () => {
+        navigation.navigate("PaymentMethodSelection", {
+            onPaymentMethodSelected: (method) => {
+                setSelectedPaymentMethod(method);
+            }
+        });
     };
 
     const handleConfirm = () => {
@@ -234,16 +252,23 @@ const FindRide = () => {
             return;
         }
         
-        // Navigate to the SearchingDrivers screen with all details
+        // Format payment method for storage (remove sensitive data)
+        const formattedPaymentMethod = formatPaymentMethodForStorage(selectedPaymentMethod);
+        
+        // Navigate to the SearchingDrivers screen with all details including payment method
         navigation.navigate("SearchingDrivers", {
             packageDetails,
             courierDetails,
             selectedCourier,
             rideDetails: selectedRideDetails,
+            paymentMethod: formattedPaymentMethod,
             distance,
             duration
         });
     };
+
+    // Get payment method display info using utility
+    const paymentDisplayInfo = getPaymentMethodDisplayInfo(selectedPaymentMethod);
 
     return (
         <ScrollView className="flex-1 w-full bg-gray-100">
@@ -404,14 +429,16 @@ const FindRide = () => {
                 </Animated.View>
 
                 {/* Payment Method */}
-                <TouchableOpacity className="bg-white shadow-md rounded-2xl p-4 mt-4 flex-row items-center" 
-                onPress={() => navigation.navigate("PaymentUpdates")} >
+                <TouchableOpacity 
+                    className="bg-white shadow-md rounded-2xl p-4 mt-4 flex-row items-center" 
+                    onPress={handlePaymentMethodSelection}
+                >
                     <Image 
-                        source={require("../assets/icon/cash.png")} 
+                        source={paymentDisplayInfo.icon} 
                         className="w-8 h-8"
                         style={{ width: 32, height: 32, resizeMode: 'contain' }} 
                     />
-                    <Text className="ml-3 text-black text-lg font-semibold">Cash</Text>
+                    <Text className="ml-3 text-black text-lg font-semibold">{paymentDisplayInfo.text}</Text>
                     <Image 
                         source={require("../assets/icon/rightnav.png")} 
                         className="w-6 h-6 ml-auto"
