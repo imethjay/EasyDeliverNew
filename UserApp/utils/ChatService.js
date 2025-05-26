@@ -1,14 +1,21 @@
 import { rtdb, auth } from '../firebase/init';
 import { ref, push, onValue, off, orderByChild, query, serverTimestamp, update } from 'firebase/database';
+import { onAuthStateChanged } from 'firebase/auth';
 
 class ChatService {
   constructor() {
     this.currentUser = null;
     this.activeListeners = new Map();
+    this.authUnsubscribe = null;
   }
 
-  // Initialize chat service with current user
   initialize() {
+    // Listen for auth state changes
+    this.authUnsubscribe = onAuthStateChanged(auth, (user) => {
+      this.currentUser = user;
+    });
+    
+    // Set initial user if already authenticated
     this.currentUser = auth.currentUser;
     return this.currentUser;
   }
@@ -56,7 +63,7 @@ class ChatService {
         orderId: orderId
       };
 
-      await push(chatRoomRef, chatRoomData);
+      await update(chatRoomRef, chatRoomData);
       return true;
     } catch (error) {
       console.error('Error sending message:', error);
@@ -127,19 +134,52 @@ class ChatService {
           const chatData = chatSnapshot.val();
           const chatId = chatSnapshot.key;
           
+          // Extract participants, lastMessage, lastActivity from mixed structure
+          let participants = {};
+          let lastMessage = null;
+          let lastActivity = 0;
+          let orderId = null;
+          
+          // Handle mixed data structure
+          for (const [key, value] of Object.entries(chatData)) {
+            if (key === 'participants') {
+              participants = value;
+            } else if (key === 'lastMessage') {
+              lastMessage = value;
+            } else if (key === 'lastActivity') {
+              lastActivity = value;
+            } else if (key === 'orderId') {
+              orderId = value;
+            } else if (key.startsWith('-') && typeof value === 'object') {
+              // Handle auto-generated keys (old structure)
+              if (value.participants) {
+                participants = value.participants;
+              }
+              if (value.lastMessage) {
+                lastMessage = value.lastMessage;
+              }
+              if (value.lastActivity && value.lastActivity > lastActivity) {
+                lastActivity = value.lastActivity;
+              }
+              if (value.orderId) {
+                orderId = value.orderId;
+              }
+            }
+          }
+          
           // Check if current user is a participant
-          if (chatData.participants && chatData.participants[this.currentUser.uid]) {
+          if (participants && participants[this.currentUser.uid]) {
             // Find the other participant
-            const participants = Object.keys(chatData.participants);
-            const otherParticipant = participants.find(id => id !== this.currentUser.uid);
+            const participantIds = Object.keys(participants);
+            const otherParticipant = participantIds.find(id => id !== this.currentUser.uid);
             
             if (otherParticipant) {
               chatList.push({
                 id: chatId,
                 recipientId: otherParticipant,
-                lastMessage: chatData.lastMessage,
-                lastActivity: chatData.lastActivity,
-                orderId: chatData.orderId
+                lastMessage: lastMessage,
+                lastActivity: lastActivity,
+                orderId: orderId
               });
             }
           }
@@ -203,6 +243,12 @@ class ChatService {
       }
     });
     this.activeListeners.clear();
+    
+    // Unsubscribe from auth state changes
+    if (this.authUnsubscribe) {
+      this.authUnsubscribe();
+      this.authUnsubscribe = null;
+    }
   }
 
   // Get user info for chat display

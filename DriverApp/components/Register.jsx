@@ -4,8 +4,7 @@ import { Dropdown } from 'react-native-element-dropdown';
 import * as ImagePicker from 'expo-image-picker';
 import { collection, getDocs, query, where, addDoc, serverTimestamp } from 'firebase/firestore';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, auth, storage } from '../firebase/init';
+import { db, auth } from '../firebase/init';
 import { useNavigation, useRoute } from '@react-navigation/native';
 
 // Vehicle types options
@@ -67,18 +66,151 @@ const Register = () => {
 
   const pickImage = async () => {
     try {
+      // Request permissions first
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          'Permission Required',
+          'Please grant photo library access to upload your driver\'s license.'
+        );
+        return;
+      }
+
       const result = await ImagePicker.launchImageLibraryAsync({
         allowsEditing: true,
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        quality: 1,
+        quality: 0.7, // Reduce quality for smaller base64 size
+        aspect: [4, 3], // Good aspect ratio for license documents
+        allowsMultipleSelection: false,
+        base64: true, // Enable base64 encoding
       });
 
-      if (!result.canceled) {
-        setLicenseImage(result.assets[0].uri);
+      if (!result.canceled && result.assets && result.assets[0]) {
+        const asset = result.assets[0];
+        
+        // Debug logging to understand what we're getting from the simulator
+        console.log('🔍 Image asset details:', {
+          uri: asset.uri,
+          type: asset.type,
+          fileName: asset.fileName,
+          fileSize: asset.fileSize,
+          width: asset.width,
+          height: asset.height
+        });
+        
+        // Validate file type - be more flexible with validation
+        const validMimeTypes = ['image/jpeg', 'image/jpg', 'image/png'];
+        
+        // Get file extension from URI or fileName
+        let fileExtension = '';
+        if (asset.fileName) {
+          fileExtension = asset.fileName.toLowerCase().split('.').pop();
+        } else if (asset.uri) {
+          fileExtension = asset.uri.toLowerCase().split('.').pop();
+        }
+        
+        const validExtensions = ['jpg', 'jpeg', 'png'];
+        const hasValidExtension = validExtensions.includes(fileExtension);
+        
+        // Check MIME type if available, otherwise rely on extension
+        let hasValidMimeType = true;
+        if (asset.type) {
+          hasValidMimeType = validMimeTypes.includes(asset.type.toLowerCase());
+        }
+        
+        // For simulator images or images without proper MIME types, be more lenient
+        // If we have a valid extension, allow it even if MIME type is missing/wrong
+        const isValidImage = hasValidExtension || (hasValidMimeType && asset.type);
+        
+        if (!isValidImage) {
+          console.log('❌ Invalid image type:', {
+            extension: fileExtension,
+            mimeType: asset.type,
+            hasValidExtension,
+            hasValidMimeType
+          });
+          
+          Alert.alert(
+            'Invalid File Type',
+            'Please select a JPEG or PNG image file only. Other file types are not supported.'
+          );
+          return;
+        }
+        
+        console.log('✅ Image type validation passed:', {
+          extension: fileExtension,
+          mimeType: asset.type,
+          hasValidExtension,
+          hasValidMimeType
+        });
+        
+        // Validate file size (max 5MB for base64 to avoid Firestore limits)
+        const maxSizeInBytes = 5 * 1024 * 1024; // 5MB
+        if (asset.fileSize && asset.fileSize > maxSizeInBytes) {
+          Alert.alert(
+            'File Too Large',
+            'Please select an image smaller than 5MB. You can try taking a new photo or compressing the existing one.'
+          );
+          return;
+        }
+        
+        // Validate image dimensions (optional - ensure it's not too small)
+        if (asset.width && asset.height) {
+          if (asset.width < 200 || asset.height < 200) {
+            Alert.alert(
+              'Image Too Small',
+              'Please select a clearer image. The license should be clearly readable.'
+            );
+            return;
+          }
+        }
+        
+        // Check base64 size (Firestore has 1MB document limit)
+        if (asset.base64) {
+          const base64Size = asset.base64.length * 0.75; // Approximate size in bytes
+          if (base64Size > 800000) { // 800KB limit to be safe
+            Alert.alert(
+              'Image Too Large',
+              'The image is too large to store. Please select a smaller image or reduce the quality.'
+            );
+            return;
+          }
+        }
+        
+        console.log('✅ Image selected:', {
+          uri: asset.uri,
+          width: asset.width,
+          height: asset.height,
+          fileSize: asset.fileSize,
+          type: asset.type,
+          extension: fileExtension,
+          base64Size: asset.base64 ? `${Math.round(asset.base64.length * 0.75 / 1024)}KB` : 'N/A'
+        });
+        
+        // Store both URI for display and base64 for storage
+        // Ensure we have a valid MIME type based on extension or provided type
+        let mimeType = asset.type;
+        if (!mimeType || !validMimeTypes.includes(mimeType.toLowerCase())) {
+          // Fallback to determining MIME type from extension
+          if (fileExtension === 'png') {
+            mimeType = 'image/png';
+          } else {
+            mimeType = 'image/jpeg'; // Default for jpg/jpeg
+          }
+        }
+        
+        setLicenseImage({
+          uri: asset.uri,
+          base64: asset.base64,
+          type: mimeType
+        });
       }
     } catch (error) {
       console.error('Error picking image:', error);
-      Alert.alert('Error', 'Failed to pick an image. Please try again.');
+      Alert.alert(
+        'Error', 
+        'Failed to pick an image. Please try again or restart the app if the problem persists.'
+      );
     }
   };
 
@@ -95,7 +227,7 @@ const Register = () => {
       Alert.alert('Error', 'Please select your courier company');
       return false;
     }
-    if (!licenseImage) {
+    if (!licenseImage || !licenseImage.uri) {
       Alert.alert('Error', 'Please upload your driver\'s license');
       return false;
     }
@@ -106,39 +238,34 @@ const Register = () => {
     return true;
   };
 
-  const uploadLicense = async (uid) => {
-    if (!licenseImage) return null;
+  const prepareLicenseData = async () => {
+    if (!licenseImage || !licenseImage.base64) {
+      console.log('No license image or base64 data available');
+      return null;
+    }
 
     try {
-      // Create a reference to Firebase Storage with a unique path
-      const storageRef = ref(storage, `driver_licenses/${uid}_${Date.now()}.jpg`);
+      console.log('✅ Preparing license image data for storage');
       
-      // Convert image URI to blob
-      const response = await fetch(licenseImage);
-      const blob = await response.blob();
+      // Create a data URL for the image
+      const mimeType = licenseImage.type || 'image/jpeg';
+      const licenseDataUrl = `data:${mimeType};base64,${licenseImage.base64}`;
       
-      // Upload the blob to Firebase Storage
-      const uploadTask = await uploadBytes(storageRef, blob);
-      console.log('Image uploaded successfully');
+      console.log(`✅ License image prepared: ${mimeType}, size: ${Math.round(licenseImage.base64.length * 0.75 / 1024)}KB`);
       
-      // Get download URL
-      const downloadURL = await getDownloadURL(storageRef);
-      return downloadURL;
+      return {
+        licenseImage: licenseDataUrl,
+        licenseImageType: mimeType,
+        licenseImageSize: Math.round(licenseImage.base64.length * 0.75),
+        uploadedAt: new Date().toISOString()
+      };
+      
     } catch (error) {
-      console.error("Error uploading license image:", error);
-      
-      // Log more detailed error information
-      if (error.code) {
-        console.error(`Firebase Storage error code: ${error.code}`);
-      }
-      
-      // Check if storage rules might be the issue
-      if (error.code === 'storage/unauthorized') {
-        Alert.alert('Error', 'Unable to upload image. Storage permission denied.');
-      } else {
-        Alert.alert('Error', 'Failed to upload license image. Please try again later.');
-      }
-      
+      console.error('❌ Error preparing license data:', error);
+      Alert.alert(
+        'Error', 
+        'Failed to prepare license image. Please try selecting the image again.'
+      );
       return null;
     }
   };
@@ -155,15 +282,15 @@ const Register = () => {
       // 2. Update user profile with full name
       await updateProfile(user, { displayName: fullName });
       
-      // 3. Upload driver's license image - handle this step separately to isolate errors
-      let licenseUrl = null;
+      // 3. Prepare driver's license image data
+      let licenseData = null;
       try {
-        licenseUrl = await uploadLicense(user.uid);
-        if (!licenseUrl) {
-          console.log('License image upload failed, continuing without image');
+        licenseData = await prepareLicenseData();
+        if (!licenseData) {
+          console.log('License image preparation failed, continuing without image');
         }
       } catch (imageError) {
-        console.error('License image upload error:', imageError);
+        console.error('License image preparation error:', imageError);
         // Continue without the image
       }
       
@@ -180,9 +307,15 @@ const Register = () => {
         updatedAt: serverTimestamp()
       };
       
-      // Add license URL if available
-      if (licenseUrl) {
-        driverData.licenseUrl = licenseUrl;
+      // Add license data if available
+      if (licenseData) {
+        driverData.licenseImage = licenseData.licenseImage;
+        driverData.licenseImageType = licenseData.licenseImageType;
+        driverData.licenseImageSize = licenseData.licenseImageSize;
+        driverData.licenseUploadedAt = licenseData.uploadedAt;
+        console.log('✅ License image data added to driver document');
+      } else {
+        console.log('⚠️ No license image data available');
       }
       
       // Add courier info if applicable - ensure courier ID is saved correctly
@@ -205,7 +338,9 @@ const Register = () => {
       // 6. Navigate to success screen or home
       Alert.alert(
         'Registration Successful',
-        'Your account has been created. Please wait for admin approval before you can start accepting deliveries.',
+        licenseData 
+          ? 'Your account has been created with license image. Please wait for admin approval before you can start accepting deliveries.'
+          : 'Your account has been created. Please upload your license image later and wait for admin approval.',
         [{ text: 'OK', onPress: () => navigation.navigate('DriverHome') }]
       );
     } catch (error) {
@@ -309,7 +444,7 @@ const Register = () => {
         onPress={pickImage}
         className="border border-gray-300 rounded-[20px] py-6 mb-4 justify-center items-center">
         {licenseImage ? (
-          <Image source={{ uri: licenseImage }} style={{ width: 80, height: 80, borderRadius: 10 }} />
+          <Image source={{ uri: licenseImage.uri }} style={{ width: 80, height: 80, borderRadius: 10 }} />
         ) : (
           <>
             <Image

@@ -5,6 +5,38 @@
     "driverLocations": {
       ".read": "auth != null",
       ".write": "auth != null"
+    },
+    "chats": {
+      "$chatRoomId": {
+        ".read": "auth != null && (data.child('participants').child(auth.uid).exists() || !data.exists())",
+        ".write": "auth != null",
+        "messages": {
+          "$messageId": {
+            ".read": "auth != null",
+            ".write": "auth != null"
+          }
+        },
+        "participants": {
+          ".read": "auth != null",
+          ".write": "auth != null"
+        },
+        "lastMessage": {
+          ".read": "auth != null",
+          ".write": "auth != null"
+        },
+        "lastActivity": {
+          ".read": "auth != null",
+          ".write": "auth != null"
+        },
+        "orderId": {
+          ".read": "auth != null",
+          ".write": "auth != null"
+        },
+        "$autoKey": {
+          ".read": "auth != null",
+          ".write": "auth != null"
+        }
+      }
     }
   }
 }

@@ -12,7 +12,6 @@ import Register from './components/Register';
 import ResetPassword from './components/ResetPassword';
 import OTPVerification from './components/OTPVerification';
 import DriverHome from './components/DriverHome';
-import StatsPage from './components/StatsPage';
 import MyOrder from './components/MyOrder';
 import ProofOfDeliveryScreen from './components/ProofOfDeliver.jsx';
 import RiderConfirmed from './components/RiderConfirmed';
@@ -66,7 +65,6 @@ export default function App() {
           <Stack.Screen name="ResetPassword" component={ResetPassword} />
           <Stack.Screen name="OTPVerification" component={OTPVerification} />
           <Stack.Screen name="DriverHome" component={DriverHome} />
-          <Stack.Screen name="StatsPage" component={StatsPage} />
           <Stack.Screen name="MyOrder" component={MyOrder} />
           <Stack.Screen name="OrderPreview" component={OrderPreview} />
           <Stack.Screen name="PackageCollection" component={PackageCollection} />

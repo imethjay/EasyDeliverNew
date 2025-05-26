@@ -743,29 +743,6 @@ const DriverHome = () => {
               My Orders
             </Text>
           </TouchableOpacity>
-
-          <TouchableOpacity className="items-center" onPress={() => navigation.navigate("StatsPage")}>
-            <View
-              className="p-4"
-              style={{
-                backgroundColor: "#1e40af",
-                borderRadius: wp("50%"),
-                width: wp("16%"),
-                height: wp("16%"),
-                justifyContent: "center",
-                alignItems: "center",
-              }}
-            >
-              <Image
-                source={require("../assets/icon/history.png")}
-                style={{ width: 30, height: 30, tintColor: "white" }}
-                resizeMode="contain"
-              />
-            </View>
-            <Text className="mt-2 text-base font-medium" style={{ fontSize: wp("4%") }}>
-              Stats
-            </Text>
-          </TouchableOpacity>
         </View>
 
         {/* Only show if driver is approved */}

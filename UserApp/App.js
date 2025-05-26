@@ -7,7 +7,9 @@ import { AuthProvider } from './components/auth/AuthContext';
 import { useEffect, useState } from 'react';
 import { auth } from './firebase/init';
 import { onAuthStateChanged } from 'firebase/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import OnboardingScreen from './components/OnboardingScreen';
 import LoginScreen from './components/auth/LoginScreen';
 import SignupScreen from './components/auth/SignupScreen';
 import HomePage from './components/HomePage';
@@ -36,9 +38,20 @@ const Stack = createStackNavigator();
 function MainNavigator() {
   const [initializing, setInitializing] = useState(true);
   const [user, setUser] = useState(null);
+  const [hasSeenOnboarding, setHasSeenOnboarding] = useState(null);
 
-  // Handle auth state changes
+  // Handle auth state changes and onboarding check
   useEffect(() => {
+    const checkOnboardingStatus = async () => {
+      try {
+        const onboardingStatus = await AsyncStorage.getItem('hasSeenOnboarding');
+        setHasSeenOnboarding(onboardingStatus === 'true');
+      } catch (error) {
+        console.error('Error checking onboarding status:', error);
+        setHasSeenOnboarding(false);
+      }
+    };
+
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setUser(user);
       if (initializing) {
@@ -46,11 +59,13 @@ function MainNavigator() {
       }
     });
 
+    checkOnboardingStatus();
+
     // Cleanup subscription
     return unsubscribe;
   }, [initializing]);
 
-  if (initializing) {
+  if (initializing || hasSeenOnboarding === null) {
     return (
       <View style={styles.loadingContainer}>
         {/* You can add a loading indicator here if you want */}
@@ -58,8 +73,17 @@ function MainNavigator() {
     );
   }
 
+  // Determine initial route based on onboarding and auth status
+  const getInitialRoute = () => {
+    if (!hasSeenOnboarding) {
+      return "Onboarding";
+    }
+    return user ? "Home" : "Login";
+  };
+
   return (
-    <Stack.Navigator initialRouteName={user ? "Home" : "Login"} screenOptions={{ headerShown: false }}>
+    <Stack.Navigator initialRouteName={getInitialRoute()} screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="Onboarding" component={OnboardingScreen} />
       <Stack.Screen name="Login" component={LoginScreen} />
       <Stack.Screen name="Signup" component={SignupScreen} />
       <Stack.Screen name="Home" component={HomePage} />

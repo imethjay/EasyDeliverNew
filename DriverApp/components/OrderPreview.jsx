@@ -13,8 +13,6 @@ const OrderPreview = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const { rideRequest } = route.params || {};
-  const [isCancelling, setIsCancelling] = useState(false);
-  const [isRescheduling, setIsRescheduling] = useState(false);
   const [deliveryStatus, setDeliveryStatus] = useState(rideRequest?.deliveryStatus || 'accepted');
   const [currentLocation, setCurrentLocation] = useState(null);
   const [componentError, setComponentError] = useState(null);
@@ -222,41 +220,6 @@ const OrderPreview = () => {
   const ridePrice = rideDetails?.price || 0;
   const driverEarnings = ridePrice * 0.8;
 
-  // Handle delivery cancellation
-  const handleCancelDelivery = () => {
-    Alert.alert(
-      "Cancel Delivery",
-      "Are you sure you want to cancel this delivery? This action cannot be undone.",
-      [
-        {
-          text: "No, Keep Delivery",
-          style: "cancel"
-        },
-        {
-          text: "Yes, Cancel",
-          style: "destructive",
-          onPress: showCancellationReasons
-        }
-      ]
-    );
-  };
-
-  // Show cancellation reason options
-  const showCancellationReasons = () => {
-    Alert.alert(
-      "Cancellation Reason",
-      "Please select a reason for cancelling this delivery:",
-      [
-        { text: "Customer not available", onPress: () => cancelDeliveryWithReason("Customer not available") },
-        { text: "Incorrect address", onPress: () => cancelDeliveryWithReason("Incorrect address") },
-        { text: "Package damaged", onPress: () => cancelDeliveryWithReason("Package damaged") },
-        { text: "Vehicle breakdown", onPress: () => cancelDeliveryWithReason("Vehicle breakdown") },
-        { text: "Other issue", onPress: () => cancelDeliveryWithReason("Other issue") },
-        { text: "Cancel", style: "cancel" }
-      ]
-    );
-  };
-
   // Handle package collection navigation
   const handleGoToCollection = () => {
     try {
@@ -282,70 +245,6 @@ const OrderPreview = () => {
     }
   };
 
-  // Cancel delivery with specific reason
-  const cancelDeliveryWithReason = async (reason) => {
-    try {
-      setIsCancelling(true);
-      console.log('🚫 Cancelling delivery:', rideRequest.id, 'Reason:', reason);
-
-      // Update the ride request status to cancelled
-      const requestRef = doc(db, 'rideRequests', rideRequest.id);
-      await updateDoc(requestRef, {
-        status: 'cancelled',
-        cancelledAt: serverTimestamp(),
-        cancellationReason: reason,
-        cancelledBy: 'driver',
-        driverCancellationReason: reason,
-        updatedAt: serverTimestamp()
-      });
-
-      // Reset driver availability - make them available again
-      if (rideRequest.driverId) {
-        const driverRef = doc(db, 'drivers', rideRequest.driverId);
-        await updateDoc(driverRef, {
-          isAvailable: true, // Make driver available again
-          currentRideId: null, // Clear current ride
-          lastCancellationAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
-        });
-        console.log('✅ Driver availability reset after cancellation');
-      }
-
-      // Stop location tracking
-      console.log('🛑 Stopping location tracking - delivery cancelled');
-      await LocationService.stopTracking();
-
-      // Show success message and navigate back
-      Alert.alert(
-        'Delivery Cancelled',
-        `The delivery has been cancelled successfully.\nReason: ${reason}\n\nYou are now available for new delivery requests.`,
-        [
-          {
-            text: 'OK',
-            onPress: () => navigation.navigate('DriverHome')
-          }
-        ]
-      );
-
-    } catch (error) {
-      console.error('❌ Error cancelling delivery:', error);
-      Alert.alert('Error', 'Failed to cancel delivery. Please try again.');
-    } finally {
-      setIsCancelling(false);
-    }
-  };
-
-  // Handle reschedule (placeholder for now)
-  const handleReschedule = () => {
-    Alert.alert(
-      "Reschedule Delivery",
-      "This feature will allow you to reschedule the delivery with the customer.",
-      [
-        { text: "OK" }
-      ]
-    );
-  };
-
   return (
     <CrashProtectionWrapper navigation={navigation}>
       <View className="flex-1 w-full bg-white p-4">
@@ -358,15 +257,6 @@ const OrderPreview = () => {
             <Ionicons name="arrow-back" size={20} color="black" />
           </TouchableOpacity>
           <Text className="flex-1 text-lg font-bold ml-2 text-center">Delivery Details</Text>
-          
-          {/* Cancel Button in Header */}
-          <TouchableOpacity 
-            className="bg-red-100 px-3 py-2 rounded-lg"
-            onPress={handleCancelDelivery}
-            disabled={isCancelling}
-          >
-            <Text className="text-red-600 text-sm font-medium">Cancel</Text>
-          </TouchableOpacity>
         </View>
 
         <ScrollView showsVerticalScrollIndicator={false}>
@@ -581,13 +471,6 @@ const OrderPreview = () => {
                 />
               )}
             </MapView>
-            <TouchableOpacity 
-              className="absolute bottom-4 left-4 bg-blue-800 px-4 py-4 rounded-[20px] flex-row items-center"
-              onPress={() => navigation.navigate('LiveTrack', { rideRequest })}
-            >
-              <Ionicons name="radio-outline" size={18} color="white" />
-              <Text className="text-white font-bold ml-2">Live Tracking</Text>
-            </TouchableOpacity>
           </View>
 
           {/* Action Buttons */}
@@ -613,61 +496,8 @@ const OrderPreview = () => {
                   <Ionicons name="checkmark-circle" size={20} color="white" />
                   <Text className="text-white text-center font-bold ml-2">Complete Delivery</Text>
                 </TouchableOpacity>
-
-                {/* Live Tracking Button for In Transit */}
-                <TouchableOpacity 
-                  className="bg-blue-800 p-4 rounded-[20px] flex-row items-center justify-center"
-                  onPress={() => navigation.navigate('LiveTrack', { rideRequest })}
-                >
-                  <Ionicons name="radio-outline" size={20} color="white" />
-                  <Text className="text-white text-center font-bold ml-2">Live Tracking</Text>
-                </TouchableOpacity>
               </>
             )}
-
-            {/* Reschedule Button - available for all statuses except completed */}
-            {deliveryStatus !== 'delivered' && (
-              <TouchableOpacity 
-                className="bg-orange-600 p-4 rounded-[20px] flex-row items-center justify-center"
-                onPress={handleReschedule}
-                disabled={isRescheduling}
-              >
-                <Ionicons name="calendar" size={20} color="white" />
-                <Text className="text-white text-center font-bold ml-2">Reschedule</Text>
-              </TouchableOpacity>
-            )}
-
-            {/* Cancel Delivery Button - available for all statuses except completed */}
-            {deliveryStatus !== 'delivered' && (
-              <TouchableOpacity 
-                className="bg-red-600 p-4 rounded-[20px] flex-row items-center justify-center"
-                onPress={handleCancelDelivery}
-                disabled={isCancelling}
-              >
-                {isCancelling ? (
-                  <ActivityIndicator size="small" color="white" />
-                ) : (
-                  <Ionicons name="close-circle" size={20} color="white" />
-                )}
-                <Text className="text-white text-center font-bold ml-2">
-                  {isCancelling ? 'Cancelling...' : 'Cancel Delivery'}
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* Warning Note */}
-          <View className="mt-4 bg-yellow-50 p-4 rounded-lg border border-yellow-200">
-            <View className="flex-row items-start">
-              <Ionicons name="warning" size={20} color="#D97706" />
-              <View className="ml-2 flex-1">
-                <Text className="text-yellow-800 font-medium text-sm">Important Note</Text>
-                <Text className="text-yellow-700 text-sm mt-1">
-                  Cancelling a delivery will make you available for new requests. 
-                  Please ensure you have a valid reason before cancelling.
-                </Text>
-              </View>
-            </View>
           </View>
         </ScrollView>
       </View>
