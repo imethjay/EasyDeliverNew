@@ -586,13 +586,7 @@ const Profile = () => {
                     driverData.ratings.recentReviews.map((review, index) => (
                         <View key={review.id || index} className="mb-4">
                             <View className="flex-row items-center mb-1">
-                                <Image
-                                    source={{ 
-                                        uri: review.customerPhoto || 
-                                             `https://randomuser.me/api/portraits/${index % 2 === 0 ? 'women' : 'men'}/${68 + index}.jpg` 
-                                    }}
-                                    className="w-8 h-8 rounded-full"
-                                />
+
                                 <View className="ml-2 flex-1">
                                     <Text className="font-semibold">
                                         {review.customerName || 'Customer'}

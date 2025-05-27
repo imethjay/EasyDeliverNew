@@ -622,6 +622,104 @@ const MyOrder = ({ navigation }) => {
                   </View>
                 )}
 
+                {/* Navigation Actions - Only for active orders with driver assigned */}
+                {item.fullData?.driver && ['accepted', 'collecting', 'in_transit'].includes(item.deliveryStatus) && (
+                  <View className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
+                    <Text className="text-blue-800 text-sm font-medium mb-3 flex-row items-center">
+                      <FontAwesome name="map" size={14} color="#1E40AF" />
+                      <Text className="ml-2">Track Your Delivery</Text>
+                    </Text>
+                    <View className="flex-row space-x-2">
+                      <TouchableOpacity
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          navigation.navigate('LiveTrack', {
+                            order: item.fullData
+                          });
+                        }}
+                        className="flex-1 bg-blue-600 py-3 px-4 rounded-lg mr-2"
+                      >
+                        <View className="flex-row items-center justify-center">
+                          <FontAwesome name="location-arrow" size={14} color="white" />
+                          <Text className="text-white font-semibold text-sm ml-2">Live Track</Text>
+                        </View>
+                      </TouchableOpacity>
+                      
+                      <TouchableOpacity
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          navigation.navigate('DriverNavigation', {
+                            driverLocation: item.fullData.currentDriverLocation,
+                            pickupLocation: item.fullData.packageDetails?.pickupCoordinates,
+                            dropoffLocation: item.fullData.packageDetails?.dropoffCoordinates,
+                            deliveryStatus: item.deliveryStatus,
+                            orderData: item.fullData
+                          });
+                        }}
+                        className="flex-1 bg-green-600 py-3 px-4 rounded-lg"
+                      >
+                        <View className="flex-row items-center justify-center">
+                          <FontAwesome name="route" size={14} color="white" />
+                          <Text className="text-white font-semibold text-sm ml-2">Navigate</Text>
+                        </View>
+                      </TouchableOpacity>
+                    </View>
+                    
+                    {/* Status-specific action buttons */}
+                    <View className="mt-2 flex-row space-x-2">
+                      <TouchableOpacity
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          if (item.fullData.driver?.phoneNumber) {
+                            const { Linking } = require('react-native');
+                            Linking.openURL(`tel:${item.fullData.driver.phoneNumber}`);
+                          }
+                        }}
+                        className="flex-1 bg-gray-600 py-2 px-3 rounded-lg mr-1"
+                      >
+                        <View className="flex-row items-center justify-center">
+                          <FontAwesome name="phone" size={12} color="white" />
+                          <Text className="text-white font-medium text-xs ml-1">Call</Text>
+                        </View>
+                      </TouchableOpacity>
+                      
+                      <TouchableOpacity
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          navigation.navigate('ChatScreen', {
+                            recipientId: item.fullData.driver?.uid,
+                            recipientName: item.fullData.driver?.fullName || item.fullData.driver?.name,
+                            orderId: item.fullData.rideRequestId || item.id
+                          });
+                        }}
+                        className="flex-1 bg-gray-600 py-2 px-3 rounded-lg ml-1"
+                      >
+                        <View className="flex-row items-center justify-center">
+                          <FontAwesome name="comment" size={12} color="white" />
+                          <Text className="text-white font-medium text-xs ml-1">Chat</Text>
+                        </View>
+                      </TouchableOpacity>
+                    </View>
+                    
+                    {/* ETA and Status Info */}
+                    <View className="mt-3 pt-2 border-t border-blue-200">
+                      <View className="flex-row items-center justify-between">
+                        <View className="flex-row items-center">
+                          <FontAwesome name="clock-o" size={12} color="#1E40AF" />
+                          <Text className="text-blue-700 text-xs ml-1">
+                            {item.deliveryStatus === 'accepted' ? 'Driver heading to pickup' :
+                             item.deliveryStatus === 'collecting' ? 'Collecting package' :
+                             item.deliveryStatus === 'in_transit' ? 'On the way to delivery' : 'In progress'}
+                          </Text>
+                        </View>
+                        <Text className="text-blue-600 text-xs font-medium">
+                          {item.estimatedDelivery}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                )}
+
                 {/* Rating Section - Only for delivered orders */}
                 {item.deliveryStatus === 'delivered' && (
                   <View className="mt-3 pt-3 border-t border-gray-200">

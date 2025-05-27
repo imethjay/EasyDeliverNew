@@ -32,6 +32,7 @@ import SearchingDrivers from './components/SearchingDrivers';
 import RiderConfirmed from './components/RiderConfirmed';
 import DeliveryComplete from './components/DeliveryComplete';
 import DeliveryDetails from './components/DeliveryDetails';
+import DriverNavigation from './components/DriverNavigation';
 
 // Import other components as needed
 
@@ -108,6 +109,7 @@ function MainNavigator() {
       <Stack.Screen name="RiderConfirmed" component={RiderConfirmed} />
       <Stack.Screen name="DeliveryComplete" component={DeliveryComplete} />
       <Stack.Screen name="DeliveryDetails" component={DeliveryDetails} />
+      <Stack.Screen name="DriverNavigation" component={DriverNavigation} />
     </Stack.Navigator>
   );
 }

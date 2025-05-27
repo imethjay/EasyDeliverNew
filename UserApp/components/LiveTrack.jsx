@@ -1,11 +1,15 @@
-import React, { useEffect, useState } from "react";
-import { View, Text, Image, TouchableOpacity, Dimensions, Alert, ActivityIndicator, Linking } from "react-native";
+import React, { useEffect, useState, useRef } from "react";
+import { View, Text, Image, TouchableOpacity, Dimensions, Alert, ActivityIndicator, Linking, ScrollView } from "react-native";
 import MapView, { Marker } from "react-native-maps";
+import MapViewDirections from "react-native-maps-directions";
 import { Ionicons, FontAwesome } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import { collection, query, where, orderBy, limit, onSnapshot, doc } from "firebase/firestore";
 import { ref, onValue, off } from "firebase/database";
 import { auth, db, rtdb } from "../firebase/init";
+
+
+const GOOGLE_MAPS_API_KEY = "AIzaSyDk4aXK5khZC808S32KRlGir6k0H2RTqsE"; 
 
 const LiveTrack = ({ navigation, route }) => {
     const [region, setRegion] = useState(null);
@@ -13,6 +17,16 @@ const LiveTrack = ({ navigation, route }) => {
     const [driverLocation, setDriverLocation] = useState(null);
     const [loading, setLoading] = useState(true);
     const [userUID, setUserUID] = useState(null);
+    const [pickupCoordinates, setPickupCoordinates] = useState(null);
+    const [dropoffCoordinates, setDropoffCoordinates] = useState(null);
+    const [routeInfo, setRouteInfo] = useState({
+        distance: null,
+        duration: null,
+        instructions: []
+    });
+    const [activeRoute, setActiveRoute] = useState('pickup'); // 'pickup' or 'dropoff'
+    const [isMapReady, setIsMapReady] = useState(false);
+    const mapRef = useRef(null);
 
     // Get order data from navigation params or find active order
     const orderData = route?.params?.order;
@@ -53,6 +67,71 @@ const LiveTrack = ({ navigation, route }) => {
             });
         })();
     }, []);
+
+    // Geocoding function to convert addresses to coordinates
+    const geocodeAddress = async (address) => {
+        try {
+            const response = await fetch(
+                `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${GOOGLE_MAPS_API_KEY}`
+            );
+            const data = await response.json();
+            
+            if (data.results && data.results.length > 0) {
+                const location = data.results[0].geometry.location;
+                return {
+                    latitude: location.lat,
+                    longitude: location.lng
+                };
+            }
+            return null;
+        } catch (error) {
+            console.error('Geocoding error:', error);
+            return null;
+        }
+    };
+
+    // Extract coordinates from order data
+    useEffect(() => {
+        if (currentOrder?.packageDetails) {
+            const { pickupLocation, dropoffLocation } = currentOrder.packageDetails;
+            
+            // If coordinates are already available, use them
+            if (currentOrder.packageDetails.pickupCoordinates) {
+                setPickupCoordinates(currentOrder.packageDetails.pickupCoordinates);
+            } else if (pickupLocation) {
+                // Geocode the pickup address
+                geocodeAddress(pickupLocation).then(coords => {
+                    if (coords) setPickupCoordinates(coords);
+                });
+            }
+
+            if (currentOrder.packageDetails.dropoffCoordinates) {
+                setDropoffCoordinates(currentOrder.packageDetails.dropoffCoordinates);
+            } else if (dropoffLocation) {
+                // Geocode the dropoff address
+                geocodeAddress(dropoffLocation).then(coords => {
+                    if (coords) setDropoffCoordinates(coords);
+                });
+            }
+        }
+    }, [currentOrder]);
+
+    // Determine active route based on delivery status
+    useEffect(() => {
+        if (currentOrder?.deliveryStatus) {
+            switch (currentOrder.deliveryStatus) {
+                case 'accepted':
+                case 'collecting':
+                    setActiveRoute('pickup');
+                    break;
+                case 'in_transit':
+                    setActiveRoute('dropoff');
+                    break;
+                default:
+                    setActiveRoute('pickup');
+            }
+        }
+    }, [currentOrder?.deliveryStatus]);
 
     // Fetch current active order if not provided via navigation
     useEffect(() => {
@@ -228,19 +307,39 @@ const LiveTrack = ({ navigation, route }) => {
         }
     }, [currentOrder?.deliveryStatus, currentOrder?.isRated, navigation]);
 
+    // Auto-fit map to show all markers when locations are available
+    useEffect(() => {
+        if (isMapReady && mapRef.current && driverLocation) {
+            const coordinates = [driverLocation];
+            
+            if (activeRoute === 'pickup' && pickupCoordinates) {
+                coordinates.push(pickupCoordinates);
+            } else if (activeRoute === 'dropoff' && dropoffCoordinates) {
+                coordinates.push(dropoffCoordinates);
+            }
+            
+            if (coordinates.length > 1) {
+                mapRef.current.fitToCoordinates(coordinates, {
+                    edgePadding: { top: 100, right: 50, bottom: 300, left: 50 },
+                    animated: true,
+                });
+            }
+        }
+    }, [isMapReady, driverLocation, pickupCoordinates, dropoffCoordinates, activeRoute]);
+
     // Get status display info
     const getStatusInfo = (deliveryStatus) => {
         switch (deliveryStatus) {
             case 'accepted':
-                return { status: 'Driver Coming', color: '#3b82f6' };
+                return { status: 'Driver Coming', color: '#3b82f6', icon: 'car-outline' };
             case 'collecting':
-                return { status: 'Collecting Package', color: '#f97316' };
+                return { status: 'Collecting Package', color: '#f97316', icon: 'cube-outline' };
             case 'in_transit':
-                return { status: 'On The Way', color: '#10b981' };
+                return { status: 'On The Way', color: '#10b981', icon: 'navigate-outline' };
             case 'delivered':
-                return { status: 'Delivered', color: '#059669' };
+                return { status: 'Delivered', color: '#059669', icon: 'checkmark-circle-outline' };
             default:
-                return { status: 'Processing', color: '#6b7280' };
+                return { status: 'Processing', color: '#6b7280', icon: 'time-outline' };
         }
     };
 
@@ -282,6 +381,36 @@ const LiveTrack = ({ navigation, route }) => {
         }
     };
 
+    const handleRouteReady = (result) => {
+        setRouteInfo({
+            distance: result.distance,
+            duration: result.duration,
+            instructions: result.legs?.[0]?.steps || []
+        });
+    };
+
+    const getDestinationCoordinates = () => {
+        if (activeRoute === 'pickup') {
+            return pickupCoordinates;
+        } else if (activeRoute === 'dropoff') {
+            return dropoffCoordinates;
+        }
+        return null;
+    };
+
+    const getRouteColor = () => {
+        switch (currentOrder?.deliveryStatus) {
+            case 'accepted':
+                return '#3b82f6'; // Blue
+            case 'collecting':
+                return '#f97316'; // Orange
+            case 'in_transit':
+                return '#10b981'; // Green
+            default:
+                return '#6b7280'; // Gray
+        }
+    };
+
     if (loading) {
         return (
             <View className="flex-1 bg-white justify-center items-center">
@@ -310,6 +439,7 @@ const LiveTrack = ({ navigation, route }) => {
     }
 
     const statusInfo = getStatusInfo(currentOrder.deliveryStatus);
+    const destinationCoordinates = getDestinationCoordinates();
 
     return (
         <View className="flex-1">
@@ -317,10 +447,12 @@ const LiveTrack = ({ navigation, route }) => {
             <View className="h-[60%] w-full">
                 {region && (
                     <MapView
+                        ref={mapRef}
                         style={{ flex: 1, width: Dimensions.get("window").width }}
                         initialRegion={region}
                         showsUserLocation={true}
                         showsMyLocationButton={true}
+                        onMapReady={() => setIsMapReady(true)}
                     >
                         {/* Header */}
                         <View className="absolute top-10 left-4 right-4 z-10">
@@ -331,9 +463,42 @@ const LiveTrack = ({ navigation, route }) => {
                                 >
                                     <Ionicons name="arrow-back" size={20} color="black" />
                                 </TouchableOpacity>
-                                <Text className="flex-1 text-center text-lg font-extrabold">Live Tracking</Text>
+                                <Text className="flex-1 text-center text-lg font-extrabold">Live Navigation</Text>
+                                <View className="flex-row items-center">
+                                    <View className={`w-2 h-2 rounded-full mr-2 ${driverLocation ? 'bg-green-500' : 'bg-red-500'}`} />
+                                    <Text className={`text-xs ${driverLocation ? 'text-green-600' : 'text-red-600'}`}>
+                                        {driverLocation ? 'Live' : 'Offline'}
+                                    </Text>
+                                </View>
                             </View>
                         </View>
+
+                        {/* Route Status Card */}
+                        {routeInfo.distance && routeInfo.duration && (
+                            <View className="absolute top-24 left-4 right-4 z-10 mt-4">
+                                <View className="bg-white p-3 rounded-lg shadow-md">
+                                    <View className="flex-row items-center justify-between">
+                                        <View className="flex-row items-center">
+                                            <Ionicons name={statusInfo.icon} size={20} color={statusInfo.color} />
+                                            <Text className="ml-2 font-semibold" style={{ color: statusInfo.color }}>
+                                                {statusInfo.status}
+                                            </Text>
+                                        </View>
+                                        <View className="flex-row items-center">
+                                            <Text className="text-gray-600 text-sm mr-3">
+                                                {routeInfo.distance.toFixed(1)} km
+                                            </Text>
+                                            <Text className="text-gray-800 font-semibold">
+                                                {Math.round(routeInfo.duration)} min
+                                            </Text>
+                                        </View>
+                                    </View>
+                                    <Text className="text-gray-500 text-xs mt-1">
+                                        {activeRoute === 'pickup' ? 'To pickup location' : 'To delivery location'}
+                                    </Text>
+                                </View>
+                            </View>
+                        )}
 
                         {/* User location marker */}
                         <Marker coordinate={region}>
@@ -347,18 +512,61 @@ const LiveTrack = ({ navigation, route }) => {
                             <Marker 
                                 coordinate={driverLocation}
                                 title={`${currentOrder.driver?.fullName || 'Driver'} is on the way`}
+                                rotation={driverLocation.heading || 0}
                             >
                                 <View className="bg-green-600 p-2 rounded-full">
                                     <Ionicons name="car" size={16} color="white" />
                                 </View>
                             </Marker>
                         )}
+
+                        {/* Pickup location marker */}
+                        {pickupCoordinates && (
+                            <Marker 
+                                coordinate={pickupCoordinates}
+                                title="Pickup Location"
+                                pinColor={activeRoute === 'pickup' ? '#3b82f6' : '#9ca3af'}
+                            >
+                                <View className={`p-2 rounded-full ${activeRoute === 'pickup' ? 'bg-blue-600' : 'bg-gray-400'}`}>
+                                    <Ionicons name="location" size={16} color="white" />
+                                </View>
+                            </Marker>
+                        )}
+
+                        {/* Dropoff location marker */}
+                        {dropoffCoordinates && (
+                            <Marker 
+                                coordinate={dropoffCoordinates}
+                                title="Delivery Location"
+                                pinColor={activeRoute === 'dropoff' ? '#10b981' : '#9ca3af'}
+                            >
+                                <View className={`p-2 rounded-full ${activeRoute === 'dropoff' ? 'bg-green-600' : 'bg-gray-400'}`}>
+                                    <Ionicons name="flag" size={16} color="white" />
+                                </View>
+                            </Marker>
+                        )}
+
+                        {/* Navigation Route */}
+                        {driverLocation && destinationCoordinates && GOOGLE_MAPS_API_KEY !== "YOUR_GOOGLE_MAPS_API_KEY" && (
+                            <MapViewDirections
+                                origin={driverLocation}
+                                destination={destinationCoordinates}
+                                apikey={GOOGLE_MAPS_API_KEY}
+                                strokeWidth={4}
+                                strokeColor={getRouteColor()}
+                                optimizeWaypoints={true}
+                                onReady={handleRouteReady}
+                                onError={(errorMessage) => {
+                                    console.error('MapViewDirections error:', errorMessage);
+                                }}
+                            />
+                        )}
                     </MapView>
                 )}
             </View>
 
             {/* Package Details */}
-            <View className="bg-white p-6">
+            <ScrollView className="bg-white p-6 flex-1">
                 <View className="flex-row items-center justify-between mb-4">
                     <Text className="text-lg font-bold">Package Information</Text>
                     <TouchableOpacity 
@@ -385,6 +593,31 @@ const LiveTrack = ({ navigation, route }) => {
                         <Text className="text-gray-500 text-sm">
                             To: {currentOrder.packageDetails.dropoffLocation}
                         </Text>
+                    </View>
+                )}
+
+                {/* Navigation Info */}
+                {routeInfo.distance && routeInfo.duration && (
+                    <View className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
+                        <View className="flex-row items-center justify-between mb-2">
+                            <Text className="text-blue-800 font-bold">Navigation Info</Text>
+                            <View className="flex-row items-center">
+                                <Ionicons name="navigate" size={16} color="#1e40af" />
+                                <Text className="text-blue-600 ml-1 font-semibold">
+                                    {activeRoute === 'pickup' ? 'To Pickup' : 'To Delivery'}
+                                </Text>
+                            </View>
+                        </View>
+                        <View className="flex-row justify-between">
+                            <View>
+                                <Text className="text-blue-600 text-sm">Distance</Text>
+                                <Text className="text-blue-800 font-bold">{routeInfo.distance.toFixed(1)} km</Text>
+                            </View>
+                            <View>
+                                <Text className="text-blue-600 text-sm">ETA</Text>
+                                <Text className="text-blue-800 font-bold">{Math.round(routeInfo.duration)} min</Text>
+                            </View>
+                        </View>
                     </View>
                 )}
 
@@ -460,6 +693,16 @@ const LiveTrack = ({ navigation, route }) => {
                     </Text>
                 </View>
 
+                {/* API Key Warning */}
+                {GOOGLE_MAPS_API_KEY === "YOUR_GOOGLE_MAPS_API_KEY" && (
+                    <View className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <Text className="text-yellow-800 font-semibold text-sm mb-2">⚠️ Setup Required:</Text>
+                        <Text className="text-yellow-700 text-xs">
+                            Please add your Google Maps API key to enable navigation directions.
+                        </Text>
+                    </View>
+                )}
+
                 {/* Debug Information (only show when location is unavailable) */}
                 {!driverLocation && currentOrder && (
                     <View className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
@@ -479,7 +722,7 @@ const LiveTrack = ({ navigation, route }) => {
                         </Text>
                     </View>
                 )}
-            </View>
+            </ScrollView>
         </View>
     );
 };
