@@ -14,7 +14,7 @@ const PackageCollection = () => {
     const [enteredPin, setEnteredPin] = useState('');
     const [isValidating, setIsValidating] = useState(false);
     const [pickupLocation, setPickupLocation] = useState(null);
-    const [collectionStatus, setCollectionStatus] = useState('ready'); // ready, collecting, validating, completed
+    const [collectionStatus, setCollectionStatus] = useState('ready');
 
     const { packageDetails } = rideRequest || {};
 
@@ -75,7 +75,6 @@ const PackageCollection = () => {
     }, [packageDetails]);
 
     const handleStartCollection = async () => {
-        // Validate that we have a valid ride request ID
         if (!rideRequest?.id) {
             console.error('❌ Cannot start collection: Missing ride request ID');
             Alert.alert(

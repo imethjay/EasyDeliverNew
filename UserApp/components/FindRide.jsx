@@ -21,7 +21,6 @@ import { formatCurrency } from "../utils/helpers";
 import PricingService from "../utils/PricingService";
 import { getPaymentMethodDisplayInfo, formatPaymentMethodForStorage } from "../utils/PaymentMethodUtils";
 
-// Function to get geocoding from address
 const getGeocodingFromAddress = async (address) => {
     try {
         const response = await fetch(

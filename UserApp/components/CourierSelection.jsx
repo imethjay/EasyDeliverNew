@@ -8,8 +8,8 @@ import {
     SafeAreaView,
     ActivityIndicator,
 } from "react-native";
-import { RadioButton } from "react-native-paper"; // Install react-native-paper
-import tw from "twrnc"; // Install twrnc
+import { RadioButton } from "react-native-paper"; 
+import tw from "twrnc"; 
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { collection, getDocs, query, where } from "firebase/firestore";

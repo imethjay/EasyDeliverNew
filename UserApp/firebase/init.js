@@ -1,8 +1,6 @@
-// Firebase App (the core Firebase SDK) is always required and must be listed first
 import { initializeApp } from 'firebase/app';
 import { Platform } from 'react-native';
 
-// Add the Firebase products that you want to use
 import { 
   initializeAuth, 
   getReactNativePersistence 
@@ -12,7 +10,6 @@ import { getStorage } from 'firebase/storage';
 import { getDatabase } from 'firebase/database';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Your web app's Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyDCPGQPwVcfDEkHNPqby3_8d0U9Yv3k2EI",
   authDomain: "imethjay-70734.firebaseapp.com",

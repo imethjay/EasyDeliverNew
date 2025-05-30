@@ -36,7 +36,6 @@ const DriverHome = () => {
   useEffect(() => {
     fetchDriverData();
     return () => {
-      // Clean up the delivery request manager when component unmounts
       DeliveryRequestManager.stopListening();
     };
   }, []);
@@ -45,7 +44,6 @@ const DriverHome = () => {
   const handleNewDeliveryRequest = (requestData) => {
     console.log('🔔 New delivery request received in DriverHome:', requestData.id);
     
-    // Only show modal if no modal is currently visible
     if (!showRequestModal) {
       setIncomingRequest(requestData);
       setShowRequestModal(true);
@@ -60,7 +58,6 @@ const DriverHome = () => {
 
     const updateDriverStatus = async () => {
       try {
-        // If going online, request location permissions first
         if (isOnline) {
           console.log('🟢 Driver going online - checking permissions...');
           const hasPermission = await LocationService.requestPermissions();
@@ -99,7 +96,6 @@ const DriverHome = () => {
           DeliveryRequestManager.initialize(updatedDriver, handleNewDeliveryRequest);
           DeliveryRequestManager.startListening();
 
-          // NEW: Auto-recovery for active deliveries without location tracking
           if (updatedDriver.currentRideId && !LocationService.getTrackingStatus().isTracking) {
             console.log('🔧 Auto-recovery: Driver has active delivery but no location tracking');
             console.log('📍 Starting location tracking for existing delivery:', updatedDriver.currentRideId);
@@ -228,7 +224,6 @@ const DriverHome = () => {
     }
   };
 
-  // Helper function to get user-friendly status labels
   const getDeliveryStatusLabel = (status) => {
     switch (status) {
       case 'searching':
@@ -244,14 +239,12 @@ const DriverHome = () => {
     }
   };
 
-  // Fetch current active shipment details with validation
   const getCurrentShipment = async () => {
     if (!driver || !driver.currentRideId) {
       return null;
     }
 
     try {
-      // First, try to find the current ride in tracking history
       const currentRide = trackingHistory.find(item => item.id === driver.currentRideId);
       
       if (currentRide) {
@@ -268,7 +261,6 @@ const DriverHome = () => {
         };
       }
 
-      // If not found in history, check if the ride request actually exists in the database
       console.log('🔍 Checking if current ride request exists:', driver.currentRideId);
       const requestQuery = query(
         collection(db, 'rideRequests'),
@@ -278,7 +270,6 @@ const DriverHome = () => {
       const requestSnapshot = await getDocs(requestQuery);
       
       if (requestSnapshot.empty) {
-        // The ride request doesn't exist anymore, clear the currentRideId
         console.log('🚫 Current ride request not found in database, clearing currentRideId');
         const driverRef = doc(db, 'drivers', driver.id);
         await updateDoc(driverRef, {
@@ -297,10 +288,8 @@ const DriverHome = () => {
         return null;
       }
 
-      // If the request exists but not in history yet, return the real data
       const requestData = requestSnapshot.docs[0].data();
       
-      // Validate that this request is actually assigned to this driver and still active
       if (requestData.driverId !== driver.id || !['accepted', 'searching'].includes(requestData.status)) {
         console.log('🚫 Ride request is not assigned to this driver or not active, clearing currentRideId');
         const driverRef = doc(db, 'drivers', driver.id);
@@ -332,7 +321,6 @@ const DriverHome = () => {
       };
     } catch (error) {
       console.error('❌ Error checking current ride request:', error);
-      // On error, clear the currentRideId to avoid showing invalid data
       try {
         const driverRef = doc(db, 'drivers', driver.id);
         await updateDoc(driverRef, {

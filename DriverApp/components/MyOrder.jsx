@@ -127,7 +127,6 @@ const MyOrder = () => {
 
   // Map Firebase status to display status
   const mapFirebaseStatusToDisplay = (firebaseStatus, deliveryStatus) => {
-    // If we have a deliveryStatus, use that for more granular status display
     if (deliveryStatus) {
       switch (deliveryStatus) {
         case 'accepted':
@@ -160,7 +159,6 @@ const MyOrder = () => {
 
   // Get status description
   const getStatusDescription = (status, deliveryStatus, cancellationReason) => {
-    // If we have a deliveryStatus, provide more specific descriptions
     if (deliveryStatus) {
       switch (deliveryStatus) {
         case 'accepted':
@@ -193,7 +191,6 @@ const MyOrder = () => {
 
   // Get status color
   const getStatusColor = (status, deliveryStatus) => {
-    // If we have a deliveryStatus, use specific colors
     if (deliveryStatus) {
       switch (deliveryStatus) {
         case 'accepted':
@@ -231,7 +228,6 @@ const MyOrder = () => {
     // Filter by tab with improved mapping
     if (selectedTab !== "All") {
       filtered = filtered.filter((order) => {
-        // Map tab names to possible status values
         switch (selectedTab) {
           case "Pending":
             return ['Pending', 'Pending Collection'].includes(order.status);
@@ -274,7 +270,6 @@ const MyOrder = () => {
         navigation.navigate("DriverHome");
         break;
       case "Delivery":
-        // Already on delivery page, do nothing
         break;
       case "Notifications":
         navigation.navigate("ChatList");
@@ -289,17 +284,14 @@ const MyOrder = () => {
 
   // Handle order item press
   const handleOrderPress = (order) => {
-    // Navigate to active delivery for all in-progress statuses
     const activeStatuses = ['On Process', 'Pending Collection', 'Collecting Package', 'In Transit'];
     if (activeStatuses.includes(order.status)) {
-      // Determine which screen to navigate to based on status
       if (order.status === 'Pending Collection') {
         navigation.navigate('PackageCollection', { rideRequest: order.fullData });
       } else {
         navigation.navigate('OrderPreview', { rideRequest: order.fullData });
       }
     }
-    // Could add more navigation logic for other statuses like viewing completed order details
   };
 
   const filteredOrders = getFilteredOrders();

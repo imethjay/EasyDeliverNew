@@ -15,7 +15,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
-import { generateUniqueId } from "../utils/helpers"; // Import helper function for ID generation
+import { generateUniqueId } from "../utils/helpers"; 
 
 // Google Maps API Key
 const GOOGLE_PLACES_API_KEY = 'AIzaSyDk4aXK5khZC808S32KRlGir6k0H2RTqsE';

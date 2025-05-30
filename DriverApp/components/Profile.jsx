@@ -79,13 +79,11 @@ const Profile = () => {
     const fetchEarningsData = async () => {
         try {
             setEarningsLoading(true);
-            setEarningsData(null); // Reset data to show loading
+            setEarningsData(null); 
             
-            // Debug: Investigate database structure first
             console.log('🔍 Starting earnings investigation for driver:', driverData.id);
             await DriverService.debugEarningsData(driverData.id);
             
-            // Use the new detailed earnings method
             const detailedEarnings = await DriverService.getDriverEarnings(driverData.id);
             const profileData = await DriverService.getDriverProfile();
             const stats = profileData.stats || {};

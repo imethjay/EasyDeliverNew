@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, Modal, TouchableOpacity, Image } from 'react-native';
-import Icon from 'react-native-vector-icons/Feather'; // You can change the icon set
+import Icon from 'react-native-vector-icons/Feather';
 import { formatCurrency } from '../utils/helpers';
 import PricingService from '../utils/PricingService';
 
 const DeliveryRequestModal = ({ visible, rideRequest, onAccept, onDecline }) => {
-    const [timeLeft, setTimeLeft] = useState(60); // 60 seconds for better UX
+    const [timeLeft, setTimeLeft] = useState(60); 
     const [pricingData, setPricingData] = useState(null);
     const [earnings, setEarnings] = useState(0);
     const { packageDetails, courierDetails, rideDetails, distance, duration, selectedCourier } = rideRequest || {};
@@ -13,7 +13,7 @@ const DeliveryRequestModal = ({ visible, rideRequest, onAccept, onDecline }) => 
     useEffect(() => {
         if (!visible) return;
 
-        setTimeLeft(60); // Reset to 60 seconds on open
+        setTimeLeft(60); 
         console.log('📱 Delivery request modal opened - 60 seconds to respond');
 
         const interval = setInterval(() => {
@@ -21,7 +21,7 @@ const DeliveryRequestModal = ({ visible, rideRequest, onAccept, onDecline }) => 
                 if (prev <= 1) {
                     clearInterval(interval);
                     console.log('⏰ Request timed out - auto declining');
-                    onDecline(); // Auto-decline on timeout
+                    onDecline(); 
                     return 0;
                 }
                 return prev - 1;
@@ -39,7 +39,6 @@ const DeliveryRequestModal = ({ visible, rideRequest, onAccept, onDecline }) => 
                     console.log('🔍 Fetching pricing for delivery request');
                     let pricing;
                     
-                    // Try to get courier ID from selectedCourier or courierDetails
                     const courierId = selectedCourier || courierDetails?.courierId;
                     
                     if (courierId) {
@@ -51,7 +50,6 @@ const DeliveryRequestModal = ({ visible, rideRequest, onAccept, onDecline }) => 
                     
                     setPricingData(pricing);
                     
-                    // Calculate earnings
                     const calculatedEarnings = calculateEarnings(pricing);
                     setEarnings(calculatedEarnings);
                     
@@ -71,20 +69,16 @@ const DeliveryRequestModal = ({ visible, rideRequest, onAccept, onDecline }) => 
 
     if (!rideRequest) return null;
 
-    // Calculate earnings based on ride details and distance
     const calculateEarnings = (pricing = pricingData) => {
         if (!pricing) return 0;
         
-        // Base rate calculation
         let baseRate = 0;
         
         if (rideDetails && rideDetails.price) {
-            // Driver gets 80% of the ride price
             baseRate = rideDetails.price * 0.8;
             console.log('💰 Using ride price for earnings:', rideDetails.price, 'earnings:', baseRate);
         } else {
-            // Fallback calculation using pricing service
-            const distanceKm = distance || 2; // Distance should already be in km
+            const distanceKm = distance || 2; 
             const vehicleType = rideDetails?.vehicleType || 'Bike';
             
             console.log('💰 Calculating fallback earnings for:', vehicleType, 'distance:', distanceKm);
@@ -96,9 +90,9 @@ const DeliveryRequestModal = ({ visible, rideRequest, onAccept, onDecline }) => 
 
     // Timer color based on urgency
     const getTimerColor = () => {
-        if (timeLeft <= 10) return '#EF4444'; // Red - urgent
-        if (timeLeft <= 20) return '#F59E0B'; // Amber - warning
-        return '#3B82F6'; // Blue - normal
+        if (timeLeft <= 10) return '#EF4444'; 
+        if (timeLeft <= 20) return '#F59E0B'; 
+        return '#3B82F6'; 
     };
 
     return (

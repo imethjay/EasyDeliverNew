@@ -41,7 +41,7 @@ const AddPaymentMethod = ({ navigation }) => {
     // Handle CVV input
     const handleCvvChange = (text) => {
         const cleanText = text.replace(/\D/g, '');
-        setCvv(cleanText.substring(0, 4)); // Max 4 digits for Amex
+        setCvv(cleanText.substring(0, 4)); 
     };
 
     // Validate form data

@@ -73,11 +73,7 @@ const LiveTrack = () => {
                 {/* Delivery Details */}
                 <View className="flex-row justify-between py-5 mt-3 bg-gray-100 p-4 rounded-xl">
                     <View>
-                        {/* <Text className="text-gray-500 text-sm">Delivery Service</Text> */}
                         <Text className="text-black text-2xl font-bold">Being Delivered to...</Text>
-
-                        {/* <Text className="text-gray-500 text-sm">Status</Text>
-                        <Text className="text-blue-500 font-bold">On The Way</Text> */}
                     </View>
                 </View>
 

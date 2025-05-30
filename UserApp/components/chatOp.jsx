@@ -43,13 +43,11 @@ const ChatScreen = ({ navigation, route }) => {
             setMessages(newMessages);
             setLoading(false);
             
-            // Scroll to bottom when new messages arrive
             setTimeout(() => {
                 scrollViewRef.current?.scrollToEnd({ animated: true });
             }, 100);
         });
 
-        // Mark messages as read when component mounts
         ChatService.markMessagesAsRead(recipientId);
 
         return () => {

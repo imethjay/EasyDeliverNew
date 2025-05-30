@@ -14,7 +14,6 @@ const LoginForm = () => {
     const navigation = useNavigation();
 
     const handleLogin = async () => {
-        // Validate inputs
         if (!email.trim()) {
             Alert.alert('Error', 'Please enter your email');
             return;
@@ -29,7 +28,6 @@ const LoginForm = () => {
             const userCredential = await signInWithEmailAndPassword(auth, email, password);
             const user = userCredential.user;
             
-            // Navigate to home page
             navigation.navigate('DriverHome');
         } catch (error) {
             console.error('Login error:', error);
@@ -83,8 +81,8 @@ const LoginForm = () => {
                     <Image
                         source={
                             isPasswordVisible
-                                ? require("../assets/icon/image.png") // Icon for "show password"
-                                : require("../assets/icon/image.png") // Icon for "hide password"
+                                ? require("../assets/icon/image.png") 
+                                : require("../assets/icon/image.png") 
                         }
                         style={{ width: 28, height: 18, tintColor: "gray" }}
                         resizeMode="contain"

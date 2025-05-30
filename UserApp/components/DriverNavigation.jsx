@@ -108,7 +108,6 @@ const DriverNavigation = ({
             setLocationPermission(status === 'granted');
             
             if (status === 'granted') {
-                // Get current location if driver location is not provided
                 if (!driverLocation) {
                     const location = await Location.getCurrentPositionAsync({});
                     const currentLocation = {
@@ -156,7 +155,6 @@ const DriverNavigation = ({
             instructions: result.legs?.[0]?.steps || []
         });
 
-        // Set current and next instructions
         if (result.legs?.[0]?.steps?.length > 0) {
             setCurrentInstruction(result.legs[0].steps[0]);
             if (result.legs[0].steps.length > 1) {
@@ -189,7 +187,6 @@ const DriverNavigation = ({
 
         setIsNavigating(true);
         
-        // You can integrate with external navigation apps here
         const url = `https://www.google.com/maps/dir/?api=1&destination=${destination.latitude},${destination.longitude}&travelmode=driving`;
         Linking.openURL(url).catch(() => {
             Alert.alert('Error', 'Could not open navigation app');

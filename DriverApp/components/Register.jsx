@@ -66,7 +66,6 @@ const Register = () => {
 
   const pickImage = async () => {
     try {
-      // Request permissions first
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert(
@@ -79,10 +78,10 @@ const Register = () => {
       const result = await ImagePicker.launchImageLibraryAsync({
         allowsEditing: true,
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        quality: 0.7, // Reduce quality for smaller base64 size
-        aspect: [4, 3], // Good aspect ratio for license documents
+        quality: 0.7, 
+        aspect: [4, 3], 
         allowsMultipleSelection: false,
-        base64: true, // Enable base64 encoding
+        base64: true, 
       });
 
       if (!result.canceled && result.assets && result.assets[0]) {
@@ -118,8 +117,6 @@ const Register = () => {
           hasValidMimeType = validMimeTypes.includes(asset.type.toLowerCase());
         }
         
-        // For simulator images or images without proper MIME types, be more lenient
-        // If we have a valid extension, allow it even if MIME type is missing/wrong
         const isValidImage = hasValidExtension || (hasValidMimeType && asset.type);
         
         if (!isValidImage) {
@@ -167,8 +164,8 @@ const Register = () => {
         
         // Check base64 size (Firestore has 1MB document limit)
         if (asset.base64) {
-          const base64Size = asset.base64.length * 0.75; // Approximate size in bytes
-          if (base64Size > 800000) { // 800KB limit to be safe
+          const base64Size = asset.base64.length * 0.75; 
+          if (base64Size > 800000) { 
             Alert.alert(
               'Image Too Large',
               'The image is too large to store. Please select a smaller image or reduce the quality.'
@@ -187,15 +184,13 @@ const Register = () => {
           base64Size: asset.base64 ? `${Math.round(asset.base64.length * 0.75 / 1024)}KB` : 'N/A'
         });
         
-        // Store both URI for display and base64 for storage
-        // Ensure we have a valid MIME type based on extension or provided type
+ 
         let mimeType = asset.type;
         if (!mimeType || !validMimeTypes.includes(mimeType.toLowerCase())) {
-          // Fallback to determining MIME type from extension
           if (fileExtension === 'png') {
             mimeType = 'image/png';
           } else {
-            mimeType = 'image/jpeg'; // Default for jpg/jpeg
+            mimeType = 'image/jpeg'; 
           }
         }
         
@@ -275,14 +270,11 @@ const Register = () => {
 
     setIsRegistering(true);
     try {
-      // 1. Create user account with Firebase Authentication
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
       
-      // 2. Update user profile with full name
       await updateProfile(user, { displayName: fullName });
       
-      // 3. Prepare driver's license image data
       let licenseData = null;
       try {
         licenseData = await prepareLicenseData();
@@ -291,10 +283,8 @@ const Register = () => {
         }
       } catch (imageError) {
         console.error('License image preparation error:', imageError);
-        // Continue without the image
       }
       
-      // 4. Prepare driver data
       const driverData = {
         uid: user.uid,
         fullName,

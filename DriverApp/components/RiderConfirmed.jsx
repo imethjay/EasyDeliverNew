@@ -11,7 +11,7 @@ const getRandomLocation = (latitude, longitude, range = 0.05) => {
     return { latitude: randomLat, longitude: randomLng };
 };
 
-const GOOGLE_MAPS_API_KEY = "YOUR_GOOGLE_MAPS_API_KEY"; // Replace with your key
+const GOOGLE_MAPS_API_KEY = "YOUR_GOOGLE_MAPS_API_KEY"; 
 
 const RiderConfirmed = ({ navigation }) => {
     const [pickup, setPickup] = useState(null);

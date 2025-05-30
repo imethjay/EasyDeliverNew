@@ -24,7 +24,7 @@ const LiveTrack = ({ navigation, route }) => {
         duration: null,
         instructions: []
     });
-    const [activeRoute, setActiveRoute] = useState('pickup'); // 'pickup' or 'dropoff'
+    const [activeRoute, setActiveRoute] = useState('pickup'); 
     const [isMapReady, setIsMapReady] = useState(false);
     const mapRef = useRef(null);
 
@@ -48,7 +48,6 @@ const LiveTrack = ({ navigation, route }) => {
             let { status } = await Location.requestForegroundPermissionsAsync();
             if (status !== "granted") {
                 console.log("Permission to access location was denied");
-                // Set default location (Colombo, Sri Lanka)
                 setRegion({
                     latitude: 6.9271,
                     longitude: 79.8612,
@@ -95,11 +94,9 @@ const LiveTrack = ({ navigation, route }) => {
         if (currentOrder?.packageDetails) {
             const { pickupLocation, dropoffLocation } = currentOrder.packageDetails;
             
-            // If coordinates are already available, use them
             if (currentOrder.packageDetails.pickupCoordinates) {
                 setPickupCoordinates(currentOrder.packageDetails.pickupCoordinates);
             } else if (pickupLocation) {
-                // Geocode the pickup address
                 geocodeAddress(pickupLocation).then(coords => {
                     if (coords) setPickupCoordinates(coords);
                 });
@@ -108,7 +105,6 @@ const LiveTrack = ({ navigation, route }) => {
             if (currentOrder.packageDetails.dropoffCoordinates) {
                 setDropoffCoordinates(currentOrder.packageDetails.dropoffCoordinates);
             } else if (dropoffLocation) {
-                // Geocode the dropoff address
                 geocodeAddress(dropoffLocation).then(coords => {
                     if (coords) setDropoffCoordinates(coords);
                 });
@@ -145,7 +141,6 @@ const LiveTrack = ({ navigation, route }) => {
 
         console.log('Fetching active order for user:', userUID);
         
-        // Query for active orders (not delivered or cancelled)
         const activeOrderQuery = query(
             collection(db, 'rideRequests'),
             where('customerId', '==', userUID),
@@ -401,13 +396,13 @@ const LiveTrack = ({ navigation, route }) => {
     const getRouteColor = () => {
         switch (currentOrder?.deliveryStatus) {
             case 'accepted':
-                return '#3b82f6'; // Blue
+                return '#3b82f6'; 
             case 'collecting':
-                return '#f97316'; // Orange
+                return '#f97316'; 
             case 'in_transit':
-                return '#10b981'; // Green
+                return '#10b981'; 
             default:
-                return '#6b7280'; // Gray
+                return '#6b7280'; 
         }
     };
 

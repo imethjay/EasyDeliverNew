@@ -34,20 +34,17 @@ const LoginScreen = ({ navigation }) => {
 
   // Handle forgot password press
   const handleForgotPassword = () => {
-    // You can implement reset password functionality here
     Alert.alert('Reset Password', 'Password reset functionality will be implemented here.');
   };
 
   return (
     <View className="flex-1 bg-gray-50">
-      {/* Background with subtle gradient */}
       <LinearGradient
         colors={['#f8fafc', '#f1f5f9', '#e2e8f0']}
         style={StyleSheet.absoluteFillObject}
       />
       
       <View className="flex-1 px-6 pt-16">
-        {/* Header Section */}
         <View className="mb-8">
           <View className="mb-3">
             <Text className="text-4xl font-bold text-gray-900 font-poppins">
@@ -64,7 +61,6 @@ const LoginScreen = ({ navigation }) => {
 
         {/* Form Container */}
         <View className="bg-white rounded-3xl px-6 py-8 shadow-lg shadow-gray-200 mb-6">
-          {/* Email Input */}
           <View className="mb-6">
             <Text className="text-sm font-semibold text-gray-700 mb-2 font-poppins">Email Address</Text>
             <View className={`relative border-2 rounded-2xl ${emailFocused || email ? 'border-blue-500' : 'border-gray-200'} transition-colors`}>

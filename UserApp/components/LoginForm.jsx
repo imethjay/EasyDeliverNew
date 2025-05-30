@@ -17,8 +17,6 @@ const LoginForm = () => {
 
     // Handle login button press
     const handleLogin = () => {
-        // Add validation logic here if needed
-        // For temporary implementation, just navigate to Home
         navigation.navigate('Home');
     };
 

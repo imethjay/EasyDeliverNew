@@ -107,10 +107,10 @@ const ProofOfDeliveryScreen = ({ navigation }) => {
             if (rideRequest.driverId) {
                 const driverRef = doc(db, 'drivers', rideRequest.driverId);
                 await updateDoc(driverRef, {
-                    isAvailable: true, // Make driver available again
-                    currentRideId: null, // Clear current ride
+                    isAvailable: true, 
+                    currentRideId: null, 
                     lastDeliveryCompletedAt: serverTimestamp(),
-                    totalCompletedDeliveries: increment(1), // Increment completed count
+                    totalCompletedDeliveries: increment(1), 
                     updatedAt: serverTimestamp()
                 });
                 console.log('✅ Driver availability reset - ready for new requests');
